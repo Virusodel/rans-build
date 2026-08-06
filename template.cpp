@@ -199,12 +199,20 @@ void set_wallpaper(const std::string& base64_data, const std::string& ext) {
     
     char temp_path[MAX_PATH];
     GetTempPathA(MAX_PATH, temp_path);
-    std::string wall_path = std::string(temp_path) + "wall" + ext;
+    
+    // Всегда используем .jpg для совместимости с Windows
+    std::string wall_path = std::string(temp_path) + "wall.jpg";
     
     std::ofstream out(wall_path, std::ios::binary);
     out.write((char*)data.data(), data.size());
     out.close();
     
+    // Проверяем, что файл создался
+    if (GetFileAttributesA(wall_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        return;
+    }
+    
+    // Устанавливаем обои
     SystemParametersInfoA(SPI_SETDESKWALLPAPER, 0, (PVOID)wall_path.c_str(), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
 }
 
