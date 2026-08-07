@@ -13,25 +13,20 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
-    # ========== СОБИРАЕМ MINGW ИЗ 3 ЧАСТЕЙ ==========
-    - name: Assemble MinGW
+    # ========== СКАЧИВАЕМ ПОЛНЫЙ MINGW ИЗ РЕЛИЗА ==========
+    - name: Download MinGW
       run: |
-        Write-Host "=== Assembling MinGW from parts ==="
-        $files = Get-ChildItem mingw.zip.part*
-        Write-Host "Found $($files.Count) parts"
-        $out = [System.IO.File]::OpenWrite("mingw.zip")
-        foreach ($f in $files) {
-          Write-Host "  [+] $($f.Name) ($([math]::Round($f.Length/1MB, 2)) MB)"
-          $data = [System.IO.File]::ReadAllBytes($f.FullName)
-          $out.Write($data, 0, $data.Length)
-        }
-        $out.Close()
+        Write-Host "=== Downloading full MinGW from official release ==="
+        $url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/16.1.0posix-14.0.0-msvcrt-r4/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64msvcrt-14.0.0-r4.zip"
+        $zipPath = "mingw.zip"
         
-        if (Test-Path mingw.zip) {
-          $size = (Get-Item mingw.zip).Length
-          Write-Host "=== MinGW assembled successfully ($([math]::Round($size/1MB, 2)) MB) ==="
+        Invoke-WebRequest -Uri $url -OutFile $zipPath
+        
+        if (Test-Path $zipPath) {
+          $size = (Get-Item $zipPath).Length
+          Write-Host "=== MinGW downloaded successfully ($([math]::Round($size/1MB, 2)) MB) ==="
         } else {
-          Write-Host "=== MinGW assembly failed ==="
+          Write-Host "=== MinGW download failed ==="
           exit 1
         }
     
