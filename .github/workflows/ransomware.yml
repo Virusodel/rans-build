@@ -13,6 +13,22 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
+    # ========== СОБИРАЕМ MINGW ИЗ ЧАСТЕЙ ==========
+    - name: Assemble MinGW
+      run: |
+        Write-Host "=== Assembling MinGW from parts ==="
+        Get-ChildItem mingw.zip.part*
+        Get-Content mingw.zip.part* -AsByteStream | Set-Content mingw.zip -AsByteStream
+        
+        if (Test-Path mingw.zip) {
+          $size = (Get-Item mingw.zip).Length
+          Write-Host "=== MinGW assembled successfully ($([math]::Round($size/1MB, 2)) MB) ==="
+        } else {
+          Write-Host "=== MinGW assembly failed ==="
+          exit 1
+        }
+    
+    # ========== СБОРКА БИЛДЕРА (C#) ==========
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
     
