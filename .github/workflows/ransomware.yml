@@ -17,7 +17,13 @@ jobs:
     - name: Assemble MinGW
       run: |
         Write-Host "=== Assembling MinGW from parts ==="
-        copy /b mingw.zip.part001+mingw.zip.part002 mingw.zip
+        $files = Get-ChildItem mingw.zip.part*
+        $out = [System.IO.File]::OpenWrite("mingw.zip")
+        foreach ($f in $files) {
+          $data = [System.IO.File]::ReadAllBytes($f.FullName)
+          $out.Write($data, 0, $data.Length)
+        }
+        $out.Close()
         
         if (Test-Path mingw.zip) {
           $size = (Get-Item mingw.zip).Length
