@@ -13,13 +13,15 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
-    # ========== СОБИРАЕМ MINGW ИЗ ЧАСТЕЙ ==========
+    # ========== СОБИРАЕМ MINGW ИЗ 9 ЧАСТЕЙ ==========
     - name: Assemble MinGW
       run: |
         Write-Host "=== Assembling MinGW from parts ==="
         $files = Get-ChildItem mingw.zip.part*
+        Write-Host "Found $($files.Count) parts"
         $out = [System.IO.File]::OpenWrite("mingw.zip")
         foreach ($f in $files) {
+          Write-Host "  [+] $($f.Name) ($([math]::Round($f.Length/1MB, 2)) MB)"
           $data = [System.IO.File]::ReadAllBytes($f.FullName)
           $out.Write($data, 0, $data.Length)
         }
