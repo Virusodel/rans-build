@@ -769,39 +769,48 @@ namespace RansomwareBuilder
         // ИЗВЛЕЧЕНИЕ MINGW ИЗ РЕСУРСОВ
         // ============================================================
         private string ExtractMinGW()
+{
+    string mingwDir = Path.Combine(Path.GetTempPath(), "ARES7MinGW");
+    string gppPath = Path.Combine(mingwDir, "bin", "g++.exe");
+    
+    if (File.Exists(gppPath))
+        return gppPath;
+    
+    Directory.CreateDirectory(mingwDir);
+    
+    using (var stream = GetType().Assembly.GetManifestResourceStream("RansomwareBuilder.mingw.zip"))
+    {
+        if (stream == null)
         {
-            string mingwDir = Path.Combine(Path.GetTempPath(), "ARES7MinGW");
-            string gppPath = Path.Combine(mingwDir, "bin", "g++.exe");
-            
-            if (File.Exists(gppPath))
-                return gppPath;
-            
-            Directory.CreateDirectory(mingwDir);
-            
-            using (var stream = GetType().Assembly.GetManifestResourceStream("RansomwareBuilder.mingw.zip"))
-            {
-                if (stream == null)
-                {
-                    MessageBox.Show("MinGW not found in resources! Please make sure mingw.zip is embedded.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return null;
-                }
-                
-                using (var archive = new ZipArchive(stream))
-                {
-                    foreach (var entry in archive.Entries)
-                    {
-                        if (entry.FullName.EndsWith("/") || entry.FullName.EndsWith("\\"))
-                            continue;
-                        
-                        string fullPath = Path.Combine(mingwDir, entry.FullName);
-                        Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
-                        entry.ExtractToFile(fullPath, true);
-                    }
-                }
-            }
-            
-            return File.Exists(gppPath) ? gppPath : null;
+            MessageBox.Show("MinGW not found in resources! Please make sure mingw.zip is embedded.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return null;
         }
+        
+        using (var archive = new ZipArchive(stream))
+        {
+            foreach (var entry in archive.Entries)
+            {
+                if (entry.FullName.EndsWith("/") || entry.FullName.EndsWith("\\"))
+                    continue;
+                
+                // ============================================================
+                // УБИРАЕМ ПАПКУ mingw64/ ИЗ ПУТИ
+                // ============================================================
+                string entryName = entry.FullName;
+                if (entryName.StartsWith("mingw64/"))
+                    entryName = entryName.Substring(8); // убираем "mingw64/"
+                else if (entryName.StartsWith("mingw64\\"))
+                    entryName = entryName.Substring(8);
+                
+                string fullPath = Path.Combine(mingwDir, entryName);
+                Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
+                entry.ExtractToFile(fullPath, true);
+            }
+        }
+    }
+    
+    return File.Exists(gppPath) ? gppPath : null;
+}
         
         // ============================================================
         // ГЕНЕРАЦИЯ ИСХОДНОГО КОДА
