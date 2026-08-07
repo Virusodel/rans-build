@@ -4,12 +4,16 @@
     <TargetFramework>net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyTitle>ARES-7 Ransomware Builder</AssemblyTitle>
-    <AssemblyDescription>v8.0 TCC Builder</AssemblyDescription>
+    <AssemblyDescription>v9.0 MinGW Builder</AssemblyDescription>
     <RootNamespace>RansomwareBuilder</RootNamespace>
     <PlatformTarget>x86</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
-    <!-- TCC компилятор встроен в ресурсы -->
-    <EmbeddedResource Include="tcc.exe" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- MinGW встроен в ресурсы -->
+    <EmbeddedResource Include="mingw.zip" />
   </ItemGroup>
 </Project>
