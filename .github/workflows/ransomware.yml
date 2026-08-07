@@ -1,4 +1,4 @@
-name: Build Ransomware Builder v8.0 (TCC)
+name: Build Ransomware Builder v9.0 (MinGW)
 
 on:
   push:
@@ -13,7 +13,6 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
-    # ========== СБОРКА БИЛДЕРА (C#) ==========
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
     
@@ -28,7 +27,7 @@ jobs:
         if (Test-Path "bin\Any CPU\Release\net48\builder.exe") {
           Write-Host "=== Build SUCCESS ==="
           Get-ChildItem "bin\Any CPU\Release\net48\builder.exe" | Format-Table -AutoSize
-          Copy-Item "bin\Any CPU\Release\net48\builder.exe" "RansomwareBuilder_v8_TCC.exe"
+          Copy-Item "bin\Any CPU\Release\net48\builder.exe" "RansomwareBuilder_v9_MinGW.exe"
         } else {
           Write-Host "=== Build FAILED ==="
           exit 1
@@ -37,5 +36,5 @@ jobs:
     - name: Upload Builder EXE
       uses: actions/upload-artifact@v4
       with:
-        name: RansomwareBuilder_v8_TCC
-        path: RansomwareBuilder_v8_TCC.exe
+        name: RansomwareBuilder_v9_MinGW
+        path: RansomwareBuilder_v9_MinGW.exe
