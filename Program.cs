@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Forms;
 
-namespace RansomwareBuilder
+namespace WinLockerBuilder  // ← исправлено! Было RansomwareBuilder
 {
     static class Program
     {
