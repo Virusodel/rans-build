@@ -3,9 +3,10 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyTitle>ARES-7 Ransomware Builder</AssemblyTitle>
-    <AssemblyDescription>v6.0 C++ Builder</AssemblyDescription>
+    <AssemblyTitle>V-Rans0mware Builder</AssemblyTitle>
+    <AssemblyDescription>v7.0 Full Working Builder</AssemblyDescription>
     <RootNamespace>RansomwareBuilder</RootNamespace>
+    <PlatformTarget>x86</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="template.exe" />
