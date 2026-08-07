@@ -13,7 +13,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
-    # ========== СОБИРАЕМ MINGW ИЗ 9 ЧАСТЕЙ ==========
+    # ========== СОБИРАЕМ MINGW ИЗ 3 ЧАСТЕЙ ==========
     - name: Assemble MinGW
       run: |
         Write-Host "=== Assembling MinGW from parts ==="
