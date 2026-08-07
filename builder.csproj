@@ -3,8 +3,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyTitle>ARES-7 Ransomware Builder</AssemblyTitle>
-    <AssemblyDescription>v11.0 C# Compiler</AssemblyDescription>
+    <AssemblyTitle>V-Ransomware Builder v12.2</AssemblyTitle>
+    <AssemblyDescription>Full Working + Real ChaCha20</AssemblyDescription>
     <RootNamespace>RansomwareBuilder</RootNamespace>
     <PlatformTarget>x86</PlatformTarget>
   </PropertyGroup>
