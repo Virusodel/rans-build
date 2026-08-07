@@ -13,17 +13,6 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     
-    # ========== СКАЧИВАЕМ TCC ==========
-    - name: Download TCC
-      run: |
-        Invoke-WebRequest -Uri "https://github.com/TinyCC/tinycc/raw/master/tcc.exe" -OutFile "tcc.exe"
-        if (Test-Path tcc.exe) {
-          Write-Host "=== TCC downloaded successfully ==="
-        } else {
-          Write-Host "=== TCC download failed ==="
-          exit 1
-        }
-    
     # ========== СБОРКА БИЛДЕРА (C#) ==========
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
