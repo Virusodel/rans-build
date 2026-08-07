@@ -17,8 +17,7 @@ jobs:
     - name: Assemble MinGW
       run: |
         Write-Host "=== Assembling MinGW from parts ==="
-        Get-ChildItem mingw.zip.part*
-        Get-Content mingw.zip.part* -AsByteStream | Set-Content mingw.zip -AsByteStream
+        copy /b mingw.zip.part001+mingw.zip.part002 mingw.zip
         
         if (Test-Path mingw.zip) {
           $size = (Get-Item mingw.zip).Length
