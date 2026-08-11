@@ -15,10 +15,36 @@ start_stage2:
     mov ax, 0x0A00
     int 0x10
 
-    mov si, msg_title
+    ; Загружаем заголовок из сектора 4
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x9000
+    mov ah, 0x02
+    mov al, 1
+    mov ch, 0
+    mov cl, 4
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jc load_error
+
+    mov si, 0x9000
     call print
 
-    mov si, msg_body
+    ; Загружаем текст из секторов 5-6
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x9200
+    mov ah, 0x02
+    mov al, 2
+    mov ch, 0
+    mov cl, 5
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jc load_error
+
+    mov si, 0x9200
     call print
 
     mov si, msg_prompt
@@ -33,6 +59,11 @@ password_loop:
     mov si, msg_wrong
     call print
     jmp password_loop
+
+load_error:
+    mov si, msg_error
+    call print
+    jmp hang
 
 restore_and_boot:
     call restore_mbr
@@ -101,8 +132,9 @@ get_password:
     cmp al, 0x08
     je .backspace
     stosb
+    ; Выводим ВВЕДЕННЫЙ СИМВОЛ вместо звездочки
     mov ah, 0x0E
-    mov al, '*'
+    mov al, [di - 1]    ; Берем последний введенный символ
     int 0x10
     jmp .loop
 .backspace:
@@ -143,24 +175,18 @@ hang:
     hlt
     jmp hang
 
-; ===== ДАННЫЕ (БЕЗ ОГРАНИЧЕНИЙ) =====
-msg_title:
-    db 13,10,'========================================',13,10
-    db '     {TITLE} ',13,10
-    db '========================================',13,10,0
-
-msg_body:
-    db 13,10
-    db '{BODY}',13,10,0
-
+; ===== ДАННЫЕ =====
 msg_prompt:
     db 13,10,'Password: ',0
 
 msg_wrong:
     db 13,10,'Wrong password!',13,10,0
 
+msg_error:
+    db 'Load error!',0
+
 password:
-    db '{PASSWORD}',0
+    {PASSWORD_HEX}
 
 buffer:
     times 32 db 0
