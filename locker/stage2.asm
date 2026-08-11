@@ -186,7 +186,7 @@ msg_error:
     db 'Load error!',0
 
 password:
-    {PASSWORD_HEX}
+    db {PASSWORD_HEX}
 
 buffer:
     times 32 db 0
