@@ -18,6 +18,11 @@ void Log(const char* msg) {
     }
 }
 
+// === ЛОГИРОВАНИЕ С STRING ===
+void Log(const std::string& msg) {
+    Log(msg.c_str());
+}
+
 // === ПРОВЕРКА ПРАВ АДМИНИСТРАТОРА ===
 bool IsAdmin() {
     Log("IsAdmin() called");
