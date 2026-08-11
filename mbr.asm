@@ -11,27 +11,23 @@ start:
     mov sp, 0x7C00
     sti
 
-    ; Сохраняем оригинальный MBR в сектор 2
     call save_mbr
 
-    ; Загружаем основной код из сектора 3 в память по адресу 0x8000
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x8000
     mov ah, 0x02
-    mov al, 8          ; Загружаем 8 секторов (4 КБ) -> достаточно для всего
+    mov al, 8
     mov ch, 0
-    mov cl, 3          ; Начинаем с сектора 3
+    mov cl, 3
     mov dh, 0
     mov dl, 0x80
     int 0x13
     jc load_error
 
-    ; Передаём управление основному коду
     jmp 0x0000:0x8000
 
 load_error:
-    ; Если не удалось загрузить — показываем ошибку
     mov si, msg_error
     call print
     jmp hang
@@ -49,6 +45,7 @@ save_mbr:
     mov dl, 0x80
     int 0x13
     jc .error
+
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x7E00
