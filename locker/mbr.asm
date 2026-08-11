@@ -11,8 +11,7 @@ start:
     mov sp, 0x7C00
     sti
 
-    call save_mbr
-
+    ; Загружаем Stage2 из сектора 3
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x8000
@@ -31,34 +30,6 @@ load_error:
     mov si, msg_error
     call print
     jmp hang
-
-save_mbr:
-    pusha
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x7E00
-    mov ah, 0x02
-    mov al, 1
-    mov ch, 0
-    mov cl, 1
-    mov dh, 0
-    mov dl, 0x80
-    int 0x13
-    jc .error
-
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x7E00
-    mov ah, 0x03
-    mov al, 1
-    mov ch, 0
-    mov cl, 2
-    mov dh, 0
-    mov dl, 0x80
-    int 0x13
-.error:
-    popa
-    ret
 
 print:
     lodsb
