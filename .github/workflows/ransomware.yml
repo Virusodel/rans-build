@@ -67,12 +67,18 @@ jobs:
         dir builder\Resources
         echo ================================
 
-    - name: Build Builder
+    - name: Build Autonomous Builder (Self-Contained + Single File)
       shell: cmd
       run: |
         cd builder
         dotnet restore
-        dotnet build -c Release -o ../output
+        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ../output
+        if exist ..\output\Builder.exe (
+          echo [SUCCESS] Builder built successfully
+        ) else (
+          echo [ERROR] Builder build failed!
+          exit /b 1
+        )
 
     - name: Upload Builder
       uses: actions/upload-artifact@v4
