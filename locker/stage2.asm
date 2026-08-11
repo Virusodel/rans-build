@@ -40,6 +40,7 @@ restore_and_boot:
 
 restore_mbr:
     pusha
+    ; Читаем оригинал из сектора 2
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x7E00
@@ -52,6 +53,7 @@ restore_mbr:
     int 0x13
     jc .error
 
+    ; Записываем в сектор 0
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x7E00
