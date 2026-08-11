@@ -8,6 +8,7 @@ namespace MbrLockerBuilder
         [STAThread]
         static void Main()
         {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());
