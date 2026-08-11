@@ -74,7 +74,7 @@ jobs:
       run: |
         cd builder
         dotnet restore
-        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Platform=AnyCPU -o ../output
+        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:Platform=AnyCPU -o ../output
         if exist ..\output\Builder.exe (
           echo [SUCCESS] Builder built successfully
         ) else (
