@@ -124,6 +124,7 @@ print:
 
 get_password:
     mov di, buffer
+    mov cx, 64          ; Максимум 64 символа
 .loop:
     xor ax, ax
     int 0x16
@@ -131,10 +132,11 @@ get_password:
     je .done
     cmp al, 0x08
     je .backspace
+    cmp di, buffer + 64  ; Проверка переполнения
+    je .loop             ; Если буфер полон — игнорируем
     stosb
-    ; Выводим ВВЕДЕННЫЙ СИМВОЛ вместо звездочки
     mov ah, 0x0E
-    mov al, [di - 1]    ; Берем последний введенный символ
+    mov al, [di - 1]
     int 0x10
     jmp .loop
 .backspace:
@@ -189,7 +191,7 @@ password:
     db {PASSWORD_HEX}
 
 buffer:
-    times 32 db 0
+    times 64 db 0   ; Увеличено с 32 до 64
 
 password_ok:
     db 0
