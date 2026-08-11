@@ -27,6 +27,7 @@ jobs:
         dotnet-version: 6.0.x
 
     - name: Compile Template (locker_payload.exe)
+      shell: cmd
       run: |
         cd template
         call "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
@@ -40,6 +41,7 @@ jobs:
         )
 
     - name: Build Builder (C# WinForms)
+      shell: cmd
       run: |
         cd builder
         dotnet restore
