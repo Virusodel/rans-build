@@ -12,7 +12,7 @@ start_stage2:
     mov dx, 0x184F
     int 0x10
 
-    mov ax, 0x0A00
+    mov ax, 0x0C00
     int 0x10
 
     ; Загружаем заголовок из сектора 4
@@ -47,6 +47,13 @@ start_stage2:
     mov si, 0x9200
     call print
 
+    ; Перемещаем курсор в самый низ экрана (строка 24)
+    mov ah, 0x02
+    mov bh, 0x00
+    mov dh, 24
+    mov dl, 0
+    int 0x10
+
     mov si, msg_prompt
     call print
 
@@ -71,7 +78,6 @@ restore_and_boot:
 
 restore_mbr:
     pusha
-    ; Читаем оригинал из сектора 2
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x7E00
@@ -84,16 +90,9 @@ restore_mbr:
     int 0x13
     jc .error
 
-    ; Записываем в сектор 0
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x7E00
     mov ah, 0x03
     mov al, 1
-    mov ch, 0
     mov cl, 1
-    mov dh, 0
-    mov dl, 0x80
     int 0x13
 .error:
     popa
@@ -105,10 +104,7 @@ load_os:
     mov bx, 0x7C00
     mov ah, 0x02
     mov al, 1
-    mov ch, 0
     mov cl, 1
-    mov dh, 0
-    mov dl, 0x80
     int 0x13
     jmp 0x0000:0x7C00
 
@@ -124,7 +120,7 @@ print:
 
 get_password:
     mov di, buffer
-    mov cx, 64          ; Максимум 64 символа
+    mov cx, 64
 .loop:
     xor ax, ax
     int 0x16
@@ -132,8 +128,8 @@ get_password:
     je .done
     cmp al, 0x08
     je .backspace
-    cmp di, buffer + 64  ; Проверка переполнения
-    je .loop             ; Если буфер полон — игнорируем
+    cmp di, buffer + 64
+    je .loop
     stosb
     mov ah, 0x0E
     mov al, [di - 1]
@@ -179,7 +175,7 @@ hang:
 
 ; ===== ДАННЫЕ =====
 msg_prompt:
-    db 13,10,'Password: ',0
+    db 'Password: ',0
 
 msg_wrong:
     db 13,10,'Wrong password!',13,10,0
@@ -191,7 +187,7 @@ password:
     db {PASSWORD_HEX}
 
 buffer:
-    times 64 db 0   ; Увеличено с 32 до 64
+    times 64 db 0
 
 password_ok:
     db 0
