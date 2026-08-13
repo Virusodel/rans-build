@@ -12,11 +12,6 @@ start:
     sti
 
     ; ============================================================
-    ; СОХРАНЯЕМ НОМЕР ДИСКА (ДЛЯ ЗАГРУЗКИ С USB)
-    ; ============================================================
-    mov [boot_drive], dl
-
-    ; ============================================================
     ; УСТАНОВКА ВИДЕОРЕЖИМА
     ; ============================================================
     mov ax, 0x0003
@@ -43,7 +38,7 @@ start:
     mov ch, 0
     mov cl, 3
     mov dh, 0
-    mov dl, [boot_drive]
+    mov dl, 0x80
     int 0x13
     jc load_error
 
@@ -72,7 +67,7 @@ start:
     mov ch, 0
     mov cl, 11
     mov dh, 0
-    mov dl, [boot_drive]
+    mov dl, 0x80
     int 0x13
     jc load_error
 
@@ -90,7 +85,7 @@ start:
     mov ch, 0
     mov cl, 12
     mov dh, 0
-    mov dl, [boot_drive]
+    mov dl, 0x80
     int 0x13
     jc load_error
 
@@ -144,7 +139,7 @@ restore_mbr:
     mov ch, 0
     mov cl, 2
     mov dh, 0
-    mov dl, [boot_drive]
+    mov dl, 0x80
     int 0x13
     jc .error
 
@@ -156,7 +151,7 @@ restore_mbr:
     mov ch, 0
     mov cl, 1
     mov dh, 0
-    mov dl, [boot_drive]
+    mov dl, 0x80
     int 0x13
 .error:
     popa
@@ -178,7 +173,7 @@ load_os:
     mov ch, 0
     mov cl, 1
     mov dh, 0
-    mov dl, [boot_drive]
+    mov dl, 0x80
     int 0x13
     jc load_error
 
@@ -293,9 +288,6 @@ buffer:
     times 64 db 0
 
 password_ok:
-    db 0
-
-boot_drive:
     db 0
 
 times 510 - ($ - $$) db 0
