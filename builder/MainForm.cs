@@ -925,8 +925,8 @@ dw 0xAA55";
                 case 9: textColor = "09"; break; // Light Blue
                 case 10: textColor = "0A"; break; // Light Green
                 case 11: textColor = "0B"; break; // Light Cyan
-                case 12: textColor = "0C"; break; // Light Red
-                case 13: textColor = "0D"; break; // Light Magenta
+                case 12: fgColor = Color.OrangeRed; break;
+                case 13: fgColor = Color.DeepPink; break;      // Li
                 case 14: textColor = "0E"; break; // Yellow
                 case 15: textColor = "0F"; break; // White
             }
