@@ -545,8 +545,6 @@ namespace MbrLockerBuilder
 
                 try { File.Delete(mbrPath); } catch { }
                 try { File.Delete(mbrBinPath); } catch { }
-                try { File.Delete(stage2Path); } catch { }
-                try { File.Delete(stage2BinPath); } catch { }
                 if (nasmPath.StartsWith(Path.GetTempPath())) { try { File.Delete(nasmPath); } catch { } }
             }
             catch (Exception ex)
