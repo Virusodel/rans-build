@@ -11,14 +11,14 @@ start:
     mov sp, 0x7C00
     sti
 
-    ; Загружаем Stage2 из сектора 9 (10 секторов: 9-18)
+    ; Загружаем Stage2 из сектора 13 (10 секторов: 13-22)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x8000
     mov ah, 0x02
-    mov al, 10              ; 10 секторов
+    mov al, 10
     mov ch, 0
-    mov cl, 9               ; Начиная с сектора 9
+    mov cl, 13
     mov dh, 0
     mov dl, 0x80
     int 0x13
