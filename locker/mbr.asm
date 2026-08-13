@@ -104,6 +104,14 @@ start:
     call print
 
 password_loop:
+    ; ============================================================
+    ; ОЧИСТКА БУФЕРА ПЕРЕД ВВОДОМ (ИСПРАВЛЕНО!)
+    ; ============================================================
+    mov di, buffer
+    mov cx, 64
+    xor al, al
+    rep stosb
+
     call get_password
     call check_password
     cmp byte [password_ok], 1
@@ -172,14 +180,14 @@ print:
     jz .done
     mov ah, 0x0E
     mov bh, 0
-    mov bl, 0x07          ; Белый текст
+    mov bl, 0x07
     int 0x10
     jmp print
 .done:
     ret
 
 ; ============================================================
-; ВВОД ПАРОЛЯ
+; ВВОД ПАРОЛЯ (ИСПРАВЛЕННЫЙ BACKSPACE)
 ; ============================================================
 get_password:
     mov di, buffer
@@ -206,6 +214,8 @@ get_password:
     cmp di, buffer
     je .loop
     dec di
+    ; Очищаем байт в памяти (ИСПРАВЛЕНО!)
+    mov byte [di], 0
     mov ah, 0x0E
     mov bh, 0
     mov bl, 0x07
@@ -228,18 +238,18 @@ get_password:
     ret
 
 ; ============================================================
-; ПРОВЕРКА ПАРОЛЯ (ИСПРАВЛЕННАЯ!)
+; ПРОВЕРКА ПАРОЛЯ
 ; ============================================================
 check_password:
     mov si, buffer
     mov di, password
 .compare:
-    lodsb                 ; AL = байт из буфера
-    mov bl, [di]          ; BL = байт из правильного пароля
+    lodsb
+    mov bl, [di]
     cmp al, bl
     jne .fail
     inc di
-    or al, al             ; Если дошли до конца (0) — пароли совпали
+    or al, al
     jz .success
     jmp .compare
 .fail:
