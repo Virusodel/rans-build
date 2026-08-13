@@ -47,6 +47,13 @@ start_stage2:
     mov si, 0x9200
     call print
 
+    ; Перемещаем курсор в левый нижний угол (строка 24, колонка 0)
+    mov ah, 0x02
+    mov bh, 0
+    mov dh, 24
+    mov dl, 0
+    int 0x10
+
     mov si, msg_prompt
     call print
 
@@ -124,7 +131,7 @@ print:
 
 get_password:
     mov di, buffer
-    mov cx, 64          ; Максимум 64 символа
+    mov cx, 64
 .loop:
     xor ax, ax
     int 0x16
@@ -132,8 +139,10 @@ get_password:
     je .done
     cmp al, 0x08
     je .backspace
-    cmp di, buffer + 64  ; Проверка переполнения
-    je .loop             ; Если буфер полон — игнорируем
+    cmp al, 0x7F
+    je .backspace
+    cmp di, buffer + 64
+    je .loop
     stosb
     mov ah, 0x0E
     mov al, [di - 1]
@@ -153,6 +162,11 @@ get_password:
     jmp .loop
 .done:
     mov byte [di], 0
+    mov ah, 0x0E
+    mov al, 0x0A
+    int 0x10
+    mov al, 0x0D
+    int 0x10
     ret
 
 check_password:
@@ -179,7 +193,7 @@ hang:
 
 ; ===== ДАННЫЕ =====
 msg_prompt:
-    db 13,10,'Password: ',0
+    db 'Password: ',0
 
 msg_wrong:
     db 13,10,'Wrong password!',13,10,0
@@ -191,7 +205,7 @@ password:
     db {PASSWORD_HEX}
 
 buffer:
-    times 64 db 0   ; Увеличено с 32 до 64
+    times 64 db 0
 
 password_ok:
     db 0
