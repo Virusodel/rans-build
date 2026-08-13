@@ -7,6 +7,7 @@ using System.Text;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace MbrLockerBuilder
 {
