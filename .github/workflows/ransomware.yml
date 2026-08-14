@@ -20,16 +20,52 @@ jobs:
     - name: Install WDK Components
       shell: pwsh
       run: |
-        # Обновление Chocolatey
-        choco upgrade chocolatey -y
+        # Установка Chocolatey (если нет)
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        }
         
-        # Установка компонентов
-        choco install windows-sdk-10-version-2004-windbg -y --limit-output
-        choco install windows-sdk-10-version-2004-build-19041 -y --limit-output
-        choco install visualstudio2022-workload-vctools -y --limit-output
+        # Установка WDK и SDK с правильными пакетами
+        choco install windows-sdk-10.0.19041.0 -y
+        choco install windows-sdk-10-version-2004-windbg -y
+        choco install wdk -y --version=10.0.19041.0
+        
+        # Проверка установки
+        Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object FullName
         
         # Добавление путей в PATH
         echo "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64" | Out-File -FilePath $env:GITHUB_PATH -Append
+        
+    - name: Find WDK Paths
+      shell: pwsh
+      run: |
+        # Автоматическое определение версии WDK
+        $includePaths = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1
+        $libPaths = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1
+        
+        if ($includePaths) {
+          $includeVersion = $includePaths.Name
+          echo "WDK_INCLUDE_VERSION=$includeVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "Found WDK include version: $includeVersion"
+        }
+        
+        if ($libPaths) {
+          $libVersion = $libPaths.Name
+          echo "WDK_LIB_VERSION=$libVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "Found WDK lib version: $libVersion"
+        }
+        
+        # Проверка наличия ntddk.h
+        $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
+        if ($ntddk) {
+          echo "NTDDK_H_PATH=$($ntddk.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "Found ntddk.h at: $($ntddk.Directory.FullName)"
+        } else {
+          echo "ntddk.h not found!"
+          exit 1
+        }
         
     - name: Verify Source Files
       shell: pwsh
@@ -58,11 +94,17 @@ jobs:
         :: Создание директории
         mkdir scr\obj 2>nul
         
-        :: Компиляция драйвера
+        :: Компиляция драйвера с правильными путями
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\km" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\shared" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\um" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_INCLUDE_VERSION%\km" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_INCLUDE_VERSION%\shared" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_INCLUDE_VERSION%\um" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_INCLUDE_VERSION%\winrt" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_INCLUDE_VERSION%\ucrt" ^
+          /D_WIN32_WINNT=0x0A00 ^
+          /DWINVER=0x0A00 ^
+          /D_WIN64 ^
+          /DAMD64 ^
           scr\dbt_mbr_protector.c ^
           /Foscr\obj\dbt_mbr_protector.obj
         
@@ -74,9 +116,16 @@ jobs:
         
         :: Линковка драйвера
         link /MACHINE:X64 /DRIVER /OUT:scr\obj\dbt_mbr_protector.sys ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\km\x64" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_LIB_VERSION%\km\x64" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_LIB_VERSION%\ucrt\x64" ^
           scr\obj\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
+        
+        :: Проверка линковки
+        if not exist scr\obj\dbt_mbr_protector.sys (
+          echo ERROR: Linking failed!
+          exit /b 1
+        )
         
         :: Копирование INF
         copy scr\dbt_mbr_protector.inf scr\obj\
@@ -92,6 +141,7 @@ jobs:
         
         :: Компиляция notifier
         cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_INCLUDE_VERSION%\um" ^
           notifier\dbt_notifier.cpp ^
           /Fonotifier\obj\dbt_notifier.obj
         
@@ -103,6 +153,7 @@ jobs:
         
         :: Линковка notifier
         link /MACHINE:X64 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_LIB_VERSION%\um\x64" ^
           notifier\obj\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
