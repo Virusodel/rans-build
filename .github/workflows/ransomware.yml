@@ -20,26 +20,70 @@ jobs:
     - name: Install WDK Components
       shell: pwsh
       run: |
-        choco install windows-sdk-10-version-2004-windbg -y
-        choco install windows-sdk-10-version-2004-build-19041 -y
-        choco install visualstudio2022-workload-vctools -y
+        # Обновление Chocolatey
+        choco upgrade chocolatey -y
+        
+        # Установка компонентов
+        choco install windows-sdk-10-version-2004-windbg -y --limit-output
+        choco install windows-sdk-10-version-2004-build-19041 -y --limit-output
+        choco install visualstudio2022-workload-vctools -y --limit-output
+        
+        # Добавление путей в PATH
+        echo "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64" | Out-File -FilePath $env:GITHUB_PATH -Append
+        
+    - name: Verify Source Files
+      shell: pwsh
+      run: |
+        $files = @(
+          "scr\dbt_mbr_protector.c",
+          "scr\dbt_mbr_protector.inf",
+          "notifier\dbt_notifier.cpp"
+        )
+        
+        foreach ($file in $files) {
+          if (Test-Path $file) {
+            Write-Host "$file found"
+          } else {
+            Write-Host "$file MISSING"
+            exit 1
+          }
+        }
         
     - name: Build Kernel Driver
       shell: cmd
       run: |
+        :: Настройка окружения
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         
+        :: Создание директории
         mkdir scr\obj 2>nul
         
         :: Компиляция драйвера
-        cl /c /Zi /GS- /W4 /O2 /DNDEBUG /I"C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\km" /I"C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\shared" scr\dbt_mbr_protector.c /Foscr\obj\dbt_mbr_protector.obj
+        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\km" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\shared" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\um" ^
+          scr\dbt_mbr_protector.c ^
+          /Foscr\obj\dbt_mbr_protector.obj
+        
+        :: Проверка компиляции
+        if not exist scr\obj\dbt_mbr_protector.obj (
+          echo ERROR: Compilation failed!
+          exit /b 1
+        )
         
         :: Линковка драйвера
-        link /MACHINE:X64 /DRIVER /OUT:scr\obj\dbt_mbr_protector.sys /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\km\x64" scr\obj\dbt_mbr_protector.obj ntoskrnl.lib hal.lib
+        link /MACHINE:X64 /DRIVER /OUT:scr\obj\dbt_mbr_protector.sys ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\km\x64" ^
+          scr\obj\dbt_mbr_protector.obj ^
+          ntoskrnl.lib hal.lib
         
+        :: Копирование INF
         copy scr\dbt_mbr_protector.inf scr\obj\
         
-    - name: Build Notifier (User-mode)
+        echo Driver build complete!
+        
+    - name: Build Notifier
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
@@ -47,22 +91,52 @@ jobs:
         mkdir notifier\obj 2>nul
         
         :: Компиляция notifier
-        cl /c /Zi /W4 /O2 /DNDEBUG notifier\dbt_notifier.cpp /Fonotifier\obj\dbt_notifier.obj
+        cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
+          notifier\dbt_notifier.cpp ^
+          /Fonotifier\obj\dbt_notifier.obj
+        
+        :: Проверка компиляции
+        if not exist notifier\obj\dbt_notifier.obj (
+          echo ERROR: Notifier compilation failed!
+          exit /b 1
+        )
         
         :: Линковка notifier
-        link /MACHINE:X64 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS notifier\obj\dbt_notifier.obj user32.lib kernel32.lib psapi.lib advapi32.lib
+        link /MACHINE:X64 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
+          notifier\obj\dbt_notifier.obj ^
+          user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
-    - name: Sign Driver (Test Certificate)
+        echo Notifier build complete!
+        
+    - name: Sign Driver
       shell: pwsh
       run: |
+        $sysPath = "scr\obj\dbt_mbr_protector.sys"
+        
+        if (-not (Test-Path $sysPath)) {
+          Write-Host "ERROR: Driver not found for signing!"
+          exit 1
+        }
+        
+        # Создание сертификата
         $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DBT Test Root" `
           -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
           -TextExtension @("2.5.29.19={text}CA=true")
         
+        # Поиск signtool
         $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" | Select-Object -First 1
         
-        if ($signtool -and (Test-Path "scr\obj\dbt_mbr_protector.sys")) {
-          & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com scr\obj\dbt_mbr_protector.sys
+        if ($signtool) {
+          Write-Host "Signing driver with $($signtool.FullName)..."
+          & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com $sysPath
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Driver signed successfully!"
+          } else {
+            Write-Host "Signing failed with code $LASTEXITCODE"
+          }
+        } else {
+          Write-Host "WARNING: signtool not found, driver will be unsigned"
         }
         
     - name: Create Installation Package
@@ -70,81 +144,156 @@ jobs:
       run: |
         New-Item -ItemType Directory -Force -Path artifacts
         
-        # Копирование драйвера
-        Copy-Item scr\obj\dbt_mbr_protector.sys artifacts\
-        Copy-Item scr\obj\dbt_mbr_protector.inf artifacts\
-        Copy-Item scr\obj\dbt_mbr_protector.pdb artifacts\
+        # Копирование файлов
+        $files = @(
+          "scr\obj\dbt_mbr_protector.sys",
+          "scr\obj\dbt_mbr_protector.inf",
+          "scr\obj\dbt_mbr_protector.pdb",
+          "notifier\obj\dbt_notifier.exe"
+        )
         
-        # Копирование notifier
-        Copy-Item notifier\obj\dbt_notifier.exe artifacts\
+        foreach ($file in $files) {
+          if (Test-Path $file) {
+            Copy-Item $file artifacts\
+            Write-Host "Copied $file"
+          } else {
+            Write-Host "WARNING: $file not found"
+          }
+        }
         
-        # Создание установочного скрипта
+        # Создание install.bat
         @"
         @echo off
-        echo Installing DBT MBR Protector...
+        title DBT MBR Protector Installer
+        echo ========================================
+        echo  DBT MBR Protector - Installation
+        echo ========================================
+        echo.
         
-        :: Копирование драйвера
+        :: Проверка прав
+        net session >nul 2>&1
+        if %errorLevel% neq 0 (
+          echo ERROR: Administrator privileges required!
+          echo Please run as Administrator.
+          pause
+          exit /b 1
+        )
+        
+        echo [1/5] Enabling test signing mode...
+        bcdedit /set testsigning on >nul 2>&1
+        
+        echo [2/5] Copying driver...
         copy /Y dbt_mbr_protector.sys C:\Windows\System32\drivers\
+        if %errorLevel% neq 0 (
+          echo ERROR: Failed to copy driver!
+          pause
+          exit /b 1
+        )
         
-        :: Установка сервиса драйвера
+        echo [3/5] Installing service...
         sc create DbtMbrProtector binPath= "C:\Windows\System32\drivers\dbt_mbr_protector.sys" type= kernel start= boot
         
-        :: Запуск драйвера
+        echo [4/5] Starting driver...
         sc start DbtMbrProtector
         
-        :: Установка notifier
+        echo [5/5] Installing notifier...
         mkdir "C:\Program Files\DBT" 2>nul
         copy /Y dbt_notifier.exe "C:\Program Files\DBT\"
-        
-        :: Запуск notifier
         start "" "C:\Program Files\DBT\dbt_notifier.exe"
         
-        echo Installation complete!
+        echo.
+        echo ========================================
+        echo  Installation complete!
+        echo ========================================
+        echo.
+        echo  Please restart your computer for changes to take effect.
+        echo.
+        echo  To test: echo test > \\.\PhysicalDrive0
+        echo.
         pause
         "@ | Out-File -FilePath artifacts\install.bat -Encoding ASCII
         
-        # Создание скрипта удаления
+        # Создание uninstall.bat
         @"
         @echo off
-        echo Uninstalling DBT MBR Protector...
+        title DBT MBR Protector Uninstaller
+        echo ========================================
+        echo  DBT MBR Protector - Uninstallation
+        echo ========================================
+        echo.
         
+        :: Проверка прав
+        net session >nul 2>&1
+        if %errorLevel% neq 0 (
+          echo ERROR: Administrator privileges required!
+          echo Please run as Administrator.
+          pause
+          exit /b 1
+        )
+        
+        echo [1/4] Stopping notifier...
         taskkill /F /IM dbt_notifier.exe 2>nul
         
-        sc stop DbtMbrProtector
-        sc delete DbtMbrProtector
+        echo [2/4] Stopping driver...
+        sc stop DbtMbrProtector 2>nul
         
+        echo [3/4] Removing service...
+        sc delete DbtMbrProtector 2>nul
+        
+        echo [4/4] Deleting files...
         del /F C:\Windows\System32\drivers\dbt_mbr_protector.sys 2>nul
         rmdir /S /Q "C:\Program Files\DBT" 2>nul
         
-        echo Uninstallation complete!
+        echo.
+        echo ========================================
+        echo  Uninstallation complete!
+        echo ========================================
+        echo.
         pause
         "@ | Out-File -FilePath artifacts\uninstall.bat -Encoding ASCII
         
         # Создание README
         @"
-        DBT MBR Protector - Installation Guide
+        DBT MBR PROTECTOR - INSTALLATION GUIDE
         ======================================
         
-        Files:
-        - dbt_mbr_protector.sys  : Kernel driver
-        - dbt_mbr_protector.inf  : Driver installation file
-        - dbt_notifier.exe       : User-mode notification service
-        - install.bat            : Installation script
-        - uninstall.bat          : Uninstallation script
+        FILES:
+        ------
+        dbt_mbr_protector.sys  : Kernel-mode filter driver
+        dbt_mbr_protector.inf  : Driver installation file
+        dbt_notifier.exe       : User-mode notification service
+        install.bat            : Automated installation script
+        uninstall.bat          : Automated removal script
         
-        Installation:
+        INSTALLATION:
+        -------------
         1. Run install.bat as Administrator
-        2. Reboot (optional, but recommended)
+        2. Restart the computer
+        3. The protection is now active
         
-        Testing:
-        - Try writing to \\.\PhysicalDrive0
-        - Notifier will show a MessageBox on MBR write attempt
-        - Check Windows Event Viewer for logs
+        TESTING:
+        --------
+        To verify the driver works:
+        - Run as Administrator: echo test > \\.\PhysicalDrive0
+        - You should see "Access denied"
+        - Notifier will show a warning message
         
-        Requirements:
+        REQUIREMENTS:
+        -------------
         - Windows 7/8/10/11 (x64)
         - Administrator privileges
-        - Test signing mode enabled: bcdedit /set testsigning on
+        - Test signing mode (enabled by installer)
+        
+        UNINSTALL:
+        ----------
+        Run uninstall.bat as Administrator
+        
+        NOTES:
+        ------
+        - The driver protects MBR (sector 0) from any write attempts
+        - All blocked attempts are logged to Windows event log
+        - Notifier runs in background and shows alerts
+        - Requires reboot after installation
         "@ | Out-File -FilePath artifacts\README.txt -Encoding ASCII
         
     - name: Upload Artifacts
@@ -158,12 +307,14 @@ jobs:
       if: github.ref == 'refs/heads/main'
       shell: pwsh
       run: |
-        $version = (Get-Date).ToString('yyyy.MM.dd.HHmm')
-        Compress-Archive -Path artifacts\* -DestinationPath "dbt-mbr-protector-$version.zip"
+        $version = Get-Date -Format "yyyy.MM.dd.HHmm"
+        $zipFile = "dbt-mbr-protector-$version.zip"
+        Compress-Archive -Path artifacts\* -DestinationPath $zipFile -Force
+        echo "ZIP_FILE=$zipFile" | Out-File -FilePath $env:GITHUB_ENV -Append
         
     - name: Upload Release Package
       if: github.ref == 'refs/heads/main'
       uses: actions/upload-artifact@v4
       with:
         name: release-package
-        path: dbt-mbr-protector-*.zip
+        path: ${{ env.ZIP_FILE }}
