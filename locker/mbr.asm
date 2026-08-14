@@ -21,11 +21,12 @@ start:
     mov dx, 0x184F
     int 0x10
 
+    ; ЗАГРУЗКА ШРИФТА (СЕКТОРА 3-4)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x1000
     mov ah, 0x02
-    mov al, 8
+    mov al, 2
     mov ch, 0
     mov cl, 3
     mov dh, 0
@@ -37,13 +38,14 @@ start:
     mov bx, 0x0100
     int 0x10
 
+    ; ЗАГРУЗКА ЗАГОЛОВКА (СЕКТОР 5)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 11
+    mov cl, 5
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -52,13 +54,14 @@ start:
     mov si, 0x9000
     call print
 
+    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 6)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9200
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 12
+    mov cl, 6
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -82,24 +85,9 @@ password_loop:
     cmp byte [password_ok], 1
     je restore_and_boot
     
-    ; СТИРАЕМ СТАРУЮ НАДПИСЬ (без clear_line)
-    mov ah, 0x02
-    mov bh, 0
-    mov dh, 25
-    mov dl, 0
-    int 0x10
-    
-    mov cx, 20
-    mov al, ' '
-.clear_loop:
-    int 0x10
-    loop .clear_loop
-    
-    ; ВЫВОДИМ НОВУЮ WRONG PASSWORD!
     mov si, msg_wrong
     call print
-    
-    ; ВОЗВРАЩАЕМ КУРСОР НА ПАРОЛЬ
+
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -172,7 +160,7 @@ print:
 
 get_password:
     mov di, buffer
-    mov cx, 32
+    mov cx, 64
 .loop:
     xor ax, ax
     int 0x16
@@ -182,7 +170,7 @@ get_password:
     je .backspace
     cmp al, 0x7F
     je .backspace
-    cmp di, buffer + 32
+    cmp di, buffer + 64
     je .loop
     stosb
     mov ah, 0x0E
@@ -249,7 +237,7 @@ password:
     db {PASSWORD_HEX}
 
 buffer:
-    times 32 db 0
+    times 64 db 0
 password_ok:
     db 0
 
