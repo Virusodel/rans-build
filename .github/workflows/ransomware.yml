@@ -1,91 +1,89 @@
-name: Build MBR Locker Builder
+name: Build DBT MBR Protector Driver
 
 on:
   push:
+    branches: [ main, master, develop ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  SOLUTION_PATH: src
+  DRIVER_NAME: dbt_mbr_protector
+
 jobs:
   build:
-    runs-on: windows-latest
-
+    runs-on: windows-2022
+    
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v4
-
-    - name: Set up MinGW (32-bit)
-      uses: egor-tensin/setup-mingw@v3
+      
+    - name: Setup Visual Studio environment
+      uses: microsoft/setup-msbuild@v1.1
       with:
-        platform: x86
-
-    - name: Download NASM
+        vs-version: '17.0'
+        
+    - name: Setup WDK
+      shell: pwsh
+      run: |
+        # Установка WDK через chocolatey
+        choco install windows-sdk-10-version-2004-windbg -y
+        choco install windows-driver-kit -y
+        
+        # Настройка переменных
+        echo "WDKPATH=C:\Program Files (x86)\Windows Kits\10" >> $env:GITHUB_ENV
+        
+    - name: Build driver
       shell: cmd
       run: |
-        curl -L -o nasm.zip https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/win64/nasm-2.16.03-win64.zip
-        7z x nasm.zip -y
-        mkdir builder\Resources 2>nul
-        for /d %%i in (nasm-*) do copy "%%i\nasm.exe" builder\Resources\nasm.exe
-        if exist builder\Resources\nasm.exe (
-          echo [SUCCESS] NASM downloaded and copied
-        ) else (
-          echo [ERROR] NASM not found!
-          exit /b 1
-        )
-
-    - name: Copy ASM files to Resources
-      shell: cmd
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+        call "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\setenv.bat" /x64 /fre /build
+        
+        cd src
+        build -cZ
+        
+    - name: Sign driver (test certificate)
+      shell: pwsh
       run: |
-        mkdir builder\Resources 2>nul
-        copy locker\mbr.asm builder\Resources\mbr.asm
-        copy locker\stage2.asm builder\Resources\stage2.asm
-        echo [SUCCESS] ASM files copied
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+        # Создание тестового сертификата
+        $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DBT Test Root" `
+          -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
+          -TextExtension @("2.5.29.19={text}CA=true")
+        
+        # Подпись драйвера
+        & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\signtool.exe" sign `
+          /v /fd SHA256 /a /s My /n "DBT Test Root" `
+          /t http://timestamp.digicert.com `
+          src\obj\*.sys
+        
+    - name: Create INF with signed driver
+      shell: pwsh
+      run: |
+        Copy-Item src\dbt_mbr_protector.inf src\obj\ -Force
+        Copy-Item src\obj\*.sys src\obj\dbt_mbr_protector.sys -Force
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
       with:
-        dotnet-version: 6.0.x
-
-    - name: Compile Template (32-bit)
-      shell: cmd
-      run: |
-        cd template
-        i686-w64-mingw32-g++ -static -O0 -mwindows -Wl,--entry=_WinMain@16 locker_payload.cpp -o locker_payload.exe -luser32 -lkernel32 -ladvapi32 -lshlwapi -lntdll
-        echo [DEBUG] Compilation finished, checking file...
-        dir locker_payload.exe
-        if exist locker_payload.exe (
-          echo [SUCCESS] locker_payload.exe exists
-          mkdir ..\builder\Resources 2>nul
-          copy locker_payload.exe ..\builder\Resources\template.exe
-          echo [SUCCESS] Template copied to Resources
-        ) else (
-          echo [ERROR] locker_payload.exe NOT FOUND!
-          exit /b 1
-        )
-
-    - name: List Resources folder (diagnostic)
-      shell: cmd
-      run: |
-        echo === FILES IN builder\Resources ===
-        dir builder\Resources
-        echo ================================
-
-    - name: Build Universal Builder (AnyCPU + Self-Contained)
-      shell: cmd
-      run: |
-        cd builder
-        dotnet restore
-        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Platform=AnyCPU -o ../output
-        if exist ..\output\Builder.exe (
-          echo [SUCCESS] Builder built successfully
-        ) else (
-          echo [ERROR] Builder build failed!
-          exit /b 1
-        )
-
-    - name: Upload Builder
-      uses: actions/upload-artifact@v4
-      with:
-        name: MbrLockerBuilder
+        name: dbt-mbr-protector
         path: |
-          output/Builder.exe
-        if-no-files-found: error
+          src\obj\*.sys
+          src\obj\*.inf
+          src\obj\*.cat
+        retention-days: 30
+        
+    - name: Create release package
+      if: github.ref == 'refs/heads/main'
+      shell: pwsh
+      run: |
+        $version = (Get-Date).ToString('yyyy.MM.dd.HHmm')
+        Compress-Archive -Path src\obj\* -DestinationPath "dbt-mbr-protector-$version.zip"
+        echo "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+        
+    - name: Upload release asset
+      if: github.ref == 'refs/heads/main'
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-package
+        path: dbt-mbr-protector-*.zip
