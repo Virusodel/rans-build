@@ -17,18 +17,15 @@ jobs:
       with:
         vs-version: '17.0'
         
-    - name: Install Windows SDK (only)
+    - name: Install Windows SDK
       shell: pwsh
       run: |
-        # Установка только SDK (WDK уже есть в образе)
         choco install windows-sdk-10-version-2004-windbg -y
         
-        # Проверка наличия ntddk.h
         $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
         if ($ntddk) {
-          Write-Host "Found ntddk.h at: $($ntddk.Directory.FullName)"
           $version = $ntddk.Directory.Parent.Name
-          Write-Host " WDK Version: $version"
+          Write-Host "Using WDK Version: $version"
           echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
         } else {
           Write-Host "ntddk.h not found!"
@@ -48,7 +45,7 @@ jobs:
           if (Test-Path $file) {
             Write-Host "$file found"
           } else {
-            Write-Host " $file MISSING"
+            Write-Host "$file MISSING"
             exit 1
           }
         }
@@ -56,65 +53,38 @@ jobs:
     - name: Build Kernel Driver
       shell: cmd
       run: |
-        :: Настройка окружения
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         
-        :: Создание директории
         mkdir scr\obj 2>nul
         
-        :: Компиляция драйвера с правильными макросами
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\winrt" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\ucrt" ^
           /D_AMD64_ ^
-          /DAMD64 ^
           /D_WIN64 ^
-          /D_X86_=1 ^
-          /D_WIN32_WINNT=0x0A00 ^
-          /DWINVER=0x0A00 ^
-          /DNTDDI_VERSION=0x0A000007 ^
-          /D_WIN32_FOUNDATION=1 ^
-          /D_WIN32_WINNT_WIN10=0x0A00 ^
-          /D_WIN32_WINNT_WINTHRESHOLD=0x0A00 ^
-          /D_WIN32_WINNT_WINBLUE=0x0602 ^
-          /D_WIN32_WINNT_WIN8=0x0602 ^
-          /D_WIN32_WINNT_WIN7=0x0601 ^
-          /D_WIN32_WINNT_VISTA=0x0600 ^
-          /D_WIN32_WINNT_WS03=0x0502 ^
-          /D_WIN32_WINNT_LONGHORN=0x0600 ^
-          /D_WIN32_WINNT_NT4=0x0400 ^
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
-          /D_WIN32_IE=0x0700 ^
           /DNTDDI_VERSION=0x06010000 ^
           scr\dbt_mbr_protector.c ^
           /Foscr\obj\dbt_mbr_protector.obj
         
-        :: Проверка компиляции
         if not exist scr\obj\dbt_mbr_protector.obj (
           echo ERROR: Compilation failed!
           exit /b 1
         )
         
-        :: Линковка драйвера
         link /MACHINE:X64 /DRIVER /OUT:scr\obj\dbt_mbr_protector.sys ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x64" ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\ucrt\x64" ^
           scr\obj\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
-        :: Проверка линковки
         if not exist scr\obj\dbt_mbr_protector.sys (
           echo ERROR: Linking failed!
           exit /b 1
         )
         
-        :: Копирование INF
         copy scr\dbt_mbr_protector.inf scr\obj\
-        
         echo Driver build complete!
         
     - name: Build Notifier
@@ -124,22 +94,18 @@ jobs:
         
         mkdir notifier\obj 2>nul
         
-        :: Компиляция notifier
         cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
           /D_AMD64_ ^
-          /DAMD64 ^
           /D_WIN64 ^
           notifier\dbt_notifier.cpp ^
           /Fonotifier\obj\dbt_notifier.obj
         
-        :: Проверка компиляции
         if not exist notifier\obj\dbt_notifier.obj (
           echo ERROR: Notifier compilation failed!
           exit /b 1
         )
         
-        :: Линковка notifier
         link /MACHINE:X64 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x64" ^
           notifier\obj\dbt_notifier.obj ^
@@ -157,16 +123,14 @@ jobs:
           exit 1
         }
         
-        # Создание сертификата
         $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DBT Test Root" `
           -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
           -TextExtension @("2.5.29.19={text}CA=true")
         
-        # Поиск signtool
         $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" | Select-Object -First 1
         
         if ($signtool) {
-          Write-Host "Signing driver with $($signtool.FullName)..."
+          Write-Host "Signing driver..."
           & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com $sysPath
           
           if ($LASTEXITCODE -eq 0) {
@@ -183,7 +147,6 @@ jobs:
       run: |
         New-Item -ItemType Directory -Force -Path artifacts
         
-        # Копирование файлов
         $files = @(
           "scr\obj\dbt_mbr_protector.sys",
           "scr\obj\dbt_mbr_protector.inf",
@@ -194,14 +157,13 @@ jobs:
         foreach ($file in $files) {
           if (Test-Path $file) {
             Copy-Item $file artifacts\
-            Write-Host " Copied $file"
+            Write-Host "Copied $file"
           } else {
-            Write-Host " WARNING: $file not found"
+            Write-Host "WARNING: $file not found"
           }
         }
         
-        # Создание install.bat
-        @"
+        $installBat = @"
         @echo off
         title DBT MBR Protector Installer
         echo ========================================
@@ -209,7 +171,6 @@ jobs:
         echo ========================================
         echo.
         
-        :: Проверка прав
         net session >nul 2>&1
         if %errorLevel% neq 0 (
           echo ERROR: Administrator privileges required!
@@ -250,10 +211,10 @@ jobs:
         echo  To test: echo test > \\.\PhysicalDrive0
         echo.
         pause
-        "@ | Out-File -FilePath artifacts\install.bat -Encoding ASCII
+        "@
+        $installBat | Out-File -FilePath artifacts\install.bat -Encoding ASCII
         
-        # Создание uninstall.bat
-        @"
+        $uninstallBat = @"
         @echo off
         title DBT MBR Protector Uninstaller
         echo ========================================
@@ -261,7 +222,6 @@ jobs:
         echo ========================================
         echo.
         
-        :: Проверка прав
         net session >nul 2>&1
         if %errorLevel% neq 0 (
           echo ERROR: Administrator privileges required!
@@ -289,10 +249,10 @@ jobs:
         echo ========================================
         echo.
         pause
-        "@ | Out-File -FilePath artifacts\uninstall.bat -Encoding ASCII
+        "@
+        $uninstallBat | Out-File -FilePath artifacts\uninstall.bat -Encoding ASCII
         
-        # Создание README
-        @"
+        $readme = @"
         DBT MBR PROTECTOR - INSTALLATION GUIDE
         ======================================
         
@@ -333,7 +293,8 @@ jobs:
         - All blocked attempts are logged to Windows event log
         - Notifier runs in background and shows alerts
         - Requires reboot after installation
-        "@ | Out-File -FilePath artifacts\README.txt -Encoding ASCII
+        "@
+        $readme | Out-File -FilePath artifacts\README.txt -Encoding ASCII
         
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
