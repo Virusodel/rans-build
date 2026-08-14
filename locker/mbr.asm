@@ -16,11 +16,14 @@ start:
 
     mov ah, 0x06
     mov al, 0
-    mov bh, 0x00
+    mov bh,0x00
     mov cx, 0
     mov dx, 0x184F
     int 0x10
 
+    ; ============================================================
+    ; ЗАГРУЗКА ШРИФТА CP866 (СЕКТОРЫ 3-10)
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x1000
@@ -37,6 +40,9 @@ start:
     mov bx, 0x0100
     int 0x10
 
+    ; ============================================================
+    ; ЗАГРУЗКА ЗАГОЛОВКА (СЕКТОР 11)
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
@@ -52,6 +58,9 @@ start:
     mov si, 0x9000
     call print
 
+    ; ============================================================
+    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 12)
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9200
@@ -67,6 +76,9 @@ start:
     mov si, 0x9200
     call print
 
+    ; ============================================================
+    ; КУРСОР ВНИЗ И ВЫВОД "Password: "
+    ; ============================================================
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -85,11 +97,15 @@ password_loop:
     mov si, msg_wrong
     call print
 
+    ; ОЧИСТКА СТРОКИ ПОСЛЕ ОШИБКИ
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
     mov dl, 9
     int 0x10
+
+    mov si, msg_prompt
+    call print
 
     jmp password_loop
 
@@ -131,15 +147,16 @@ restore_mbr:
     ret
 
 load_os:
-    jmp 0x0000:0x7C00
+    ; ПРИНУДИТЕЛЬНАЯ ПЕРЕЗАГРУЗКА (ЧТОБЫ РАБОТАЛО В VBOX)
+    int 0x19
 
 print:
     lodsb
     or al, al
     jz .done
-    mov ah, 0x0E
-    mov bh, 0x00
-    mov bl, 0x07
+    mov ah,0x0E
+    mov bh,0x00
+    mov bl,0x07
     int 0x10
     jmp print
 .done:
@@ -159,9 +176,9 @@ get_password:
     cmp di, buffer + 64
     je .loop
     stosb
-    mov ah, 0x0E
-    mov bh, 0x00
-    mov bl, 0x07
+    mov ah,0x0E
+    mov bh,0x00
+    mov bl,0x07
     mov al, [di - 1]
     int 0x10
     jmp .loop
@@ -169,9 +186,9 @@ get_password:
     cmp di, buffer
     je .loop
     dec di
-    mov ah, 0x0E
-    mov bh, 0x00
-    mov bl, 0x07
+    mov ah,0x0E
+    mov bh,0x00
+    mov bl,0x07
     mov al, 0x08
     int 0x10
     mov al, ' '
@@ -181,9 +198,9 @@ get_password:
     jmp .loop
 .done:
     mov byte [di], 0
-    mov ah, 0x0E
-    mov bh, 0x00
-    mov bl, 0x07
+    mov ah,0x0E
+    mov bh,0x00
+    mov bl,0x07
     mov al, 0x0A
     int 0x10
     mov al, 0x0D
