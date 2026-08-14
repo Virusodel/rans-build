@@ -1,135 +1,43 @@
-name: Build DBT MBR Protector Driver
+name: Build Kernel Driver with EWDK
 
-on:
-  push:
-    branches: [ main, master, develop ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
-
-env:
-  DRIVER_NAME: dbt_mbr_protector
+on: workflow_dispatch
 
 jobs:
   build:
     runs-on: windows-2022
     
     steps:
-    - name: Checkout repository
+    - name: Checkout
       uses: actions/checkout@v4
       
-    - name: Setup Visual Studio
-      uses: microsoft/setup-msbuild@v2
-      with:
-        vs-version: '17.0'
-        
-    - name: Install WDK via Chocolatey
+    - name: Download EWDK ISO
       shell: pwsh
       run: |
-        # Установка Chocolatey (уже должен быть, но на всякий случай)
-        Set-ExecutionPolicy Bypass -Scope Process -Force
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        # Прямая ссылка на EWDK (актуальная)
+        $url = "https://download.microsoft.com/download/9/4/1/941c1c7a-afae-4932-a5fc-9008caf193d0/EWDK_22621_240228.msi"
+        $msiPath = "$env:TEMP\ewdk.msi"
+        Invoke-WebRequest -Uri $url -OutFile $msiPath
         
-        # Установка WDK (правильное имя пакета)
-        choco install windows-driver-kit-wdk-10 --version=10.0.22621.2428 -y
+        # Установка
+        msiexec /i $msiPath /quiet /qn /norestart INSTALLDIR="C:\EWDK"
         
-        # Установка SDK (необходим для сборки)
-        choco install windows-sdk-10-version-2004-windbg -y
+        echo "C:\EWDK\bin" >> $env:GITHUB_PATH
         
-        # Настройка переменных
-        echo "WDK_DIR=C:\Program Files (x86)\Windows Kits\10" >> $env:GITHUB_ENV
-        echo "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64" >> $env:GITHUB_PATH
-        
-    - name: Verify WDK installation
-      shell: pwsh
-      run: |
-        # Проверка наличия build.exe
-        $buildExe = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "build.exe" | Select-Object -First 1
-        if ($buildExe) {
-          Write-Host "Found build.exe at: $($buildExe.FullName)"
-          echo "BUILD_EXE=$($buildExe.FullName)" >> $env:GITHUB_ENV
-        } else {
-          Write-Host "build.exe not found, installing EWDK alternative..."
-          choco install ewdk -y
-        }
-        
-    - name: Build driver using EWDK
+    - name: Build with EWDK
       shell: cmd
       run: |
-        :: Создание каталога сборки
-        mkdir src\obj 2>nul
+        call "C:\EWDK\BuildEnv\setenv.bat" /x64 /fre /build
+        cd src
+        build -cZ
         
-        :: Использование EWDK для сборки
-        call "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x86\build.exe" -cZ || call "C:\Program Files\EWDK\build.exe" -cZ
-        
-        :: Копирование результата
-        copy src\obj\*\*.sys src\obj\ 2>nul
-        
-    - name: Build with MSBuild (fallback)
-      if: failure()
+    - name: Collect build artifacts
       shell: pwsh
       run: |
-        # Создание временного vcxproj для сборки
-        @"
-        <?xml version="1.0" encoding="utf-8"?>
-        <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-          <ItemGroup>
-            <ClCompile Include="src\dbt_mbr_protector.c" />
-          </ItemGroup>
-          <Import Project="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VC\VCTargets\Microsoft.Cpp.Default.props" />
-          <Import Project="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VC\VCTargets\Microsoft.Cpp.props" />
-          <Import Project="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VC\VCTargets\Microsoft.Cpp.targets" />
-        </Project>
-        "@ | Out-File -FilePath src\dbt_mbr_protector.vcxproj -Encoding UTF8
+        Get-ChildItem -Path src -Recurse -Filter "*.sys" | Copy-Item -Destination src\obj\ -Force
+        Get-ChildItem -Path src -Recurse -Filter "*.inf" | Copy-Item -Destination src\obj\ -Force
         
-        msbuild src\dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=x64
-        
-    - name: Sign driver (test certificate)
-      shell: pwsh
-      run: |
-        # Создание сертификата
-        $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DBT Test Root" `
-          -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
-          -TextExtension @("2.5.29.19={text}CA=true")
-        
-        # Поиск .sys файла
-        $sysFiles = Get-ChildItem -Path src -Recurse -Filter "*.sys"
-        if ($sysFiles) {
-          $sysFile = $sysFiles[0]
-          Write-Host "Signing: $($sysFile.FullName)"
-          
-          $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe"
-          if (Test-Path $signtool) {
-            & $signtool sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com $sysFile.FullName
-            Copy-Item $sysFile.FullName src\obj\dbt_mbr_protector.sys -Force
-          }
-        }
-        
-    - name: Prepare INF
-      shell: pwsh
-      run: |
-        Copy-Item src\dbt_mbr_protector.inf src\obj\ -Force
-        
-    - name: Upload artifacts
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: dbt-mbr-protector
-        path: |
-          src\obj\*.sys
-          src\obj\*.inf
-        retention-days: 30
-        
-    - name: Create release package
-      if: github.ref == 'refs/heads/main'
-      shell: pwsh
-      run: |
-        $version = (Get-Date).ToString('yyyy.MM.dd.HHmm')
-        Compress-Archive -Path src\obj\* -DestinationPath "dbt-mbr-protector-$version.zip"
-        
-    - name: Upload release
-      if: github.ref == 'refs/heads/main'
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-package
-        path: dbt-mbr-protector-*.zip
+        name: driver-kernel
+        path: src\obj\*
