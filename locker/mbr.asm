@@ -91,6 +91,14 @@ password_loop:
     
     mov si, msg_wrong
     call print
+    
+    ; Возврат курсора на строку с Password:
+    mov ah, 0x02
+    mov bh, 0
+    mov dh, 24
+    mov dl, 9          ; ← Длина "Password: " = 9 символов
+    int 0x10
+
     jmp password_loop
 
 load_error:
@@ -148,7 +156,7 @@ print:
     or al, al
     jz .done
     mov ah, 0x0E
-    mov bh, 0x00   ; ← ДОБАВЛЕНО!
+    mov bh, 0x00
     mov bl, 0x07
     int 0x10
     jmp print
@@ -171,7 +179,7 @@ get_password:
     je .loop
     stosb
     mov ah, 0x0E
-    mov bh, 0x00   ; ← ДОБАВЛЕНО!
+    mov bh, 0x00
     mov bl, 0x07
     mov al, [di - 1]
     int 0x10
@@ -181,7 +189,7 @@ get_password:
     je .loop
     dec di
     mov ah, 0x0E
-    mov bh, 0x00   ; ← ДОБАВЛЕНО!
+    mov bh, 0x00
     mov bl, 0x07
     mov al, 0x08
     int 0x10
@@ -193,7 +201,7 @@ get_password:
 .done:
     mov byte [di], 0
     mov ah, 0x0E
-    mov bh, 0x00   ; ← ДОБАВЛЕНО!
+    mov bh, 0x00
     mov bl, 0x07
     mov al, 0x0A
     int 0x10
