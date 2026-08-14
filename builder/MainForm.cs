@@ -683,18 +683,24 @@ password_loop:
     cmp byte [password_ok], 1
     je restore_and_boot
     
+    ; СТИРАЕМ СТАРУЮ НАДПИСЬ (без clear_line)
     mov ah, 0x02
     mov bh, 0
     mov dh, 25
     mov dl, 0
     int 0x10
     
-    mov si, clear_line
-    call print
+    mov cx, 20
+    mov al, ' '
+.clear_loop:
+    int 0x10
+    loop .clear_loop
     
+    ; ВЫВОДИМ НОВУЮ WRONG PASSWORD!
     mov si, msg_wrong
     call print
     
+    ; ВОЗВРАЩАЕМ КУРСОР НА ПАРОЛЬ
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -839,8 +845,6 @@ msg_wrong:
     db 'Wrong password!',13,10,0
 msg_error:
     db 'Load error!',0
-clear_line:
-    db '               ',13,10,0
 
 password:
     db {PASSWORD_HEX}
