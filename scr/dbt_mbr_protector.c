@@ -1,7 +1,6 @@
 #include <ntddk.h>
 #include <ntdddisk.h>
 #include <wdm.h>
-#include <ntstrsafe.h>
 #include <stdlib.h>  // для wcstoul
 
 #define DEVICE_NAME L"\\Device\\DbtMbrProtector"
@@ -21,22 +20,22 @@ typedef struct _FILTER_EXTENSION {
 ULONG64 g_GlobalAttempts = 0;
 KSPIN_LOCK g_GlobalLock;
 
-// Получение имени процесса (исправленная версия)
+// Получение имени процесса
 NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size) {
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
     
     __try {
         PCHAR pName = PsGetProcessImageFileName(CurrentProcess);
         if (pName) {
-            RtlStringCbPrintfA(ProcessName, Size, "%s", pName);
+            sprintf(ProcessName, "%s", pName);
             return STATUS_SUCCESS;
         }
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        RtlStringCbCopyA(ProcessName, Size, "UNKNOWN");
+        sprintf(ProcessName, "UNKNOWN");
         return STATUS_UNSUCCESSFUL;
     }
     
-    RtlStringCbCopyA(ProcessName, Size, "UNKNOWN");
+    sprintf(ProcessName, "UNKNOWN");
     return STATUS_SUCCESS;
 }
 
@@ -73,13 +72,11 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         );
         
         // Вывод в системный журнал
-        UNICODE_STRING msg;
         WCHAR msgBuffer[512];
-        RtlStringCchPrintfW(msgBuffer, 512, 
+        swprintf(msgBuffer, 512, 
             L"[DBT] Process %S (PID %lu) attempted to write to MBR on PhysicalDrive%lu. Blocked.",
             processName, pid, ext->DeviceNumber);
-        RtlInitUnicodeString(&msg, msgBuffer);
-        DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "%wZ\n", &msg);
+        DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "%S\n", msgBuffer);
         
         // Отменяем IRP с ошибкой доступа
         Irp->IoStatus.Status = STATUS_ACCESS_DENIED;
@@ -107,7 +104,7 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
     UNICODE_STRING deviceName;
     WCHAR nameBuffer[64];
     
-    RtlStringCchPrintfW(nameBuffer, 64, L"\\Device\\DbtMbrProtector_%lu", DeviceNumber);
+    swprintf(nameBuffer, 64, L"\\Device\\DbtMbrProtector_%lu", DeviceNumber);
     RtlInitUnicodeString(&deviceName, nameBuffer);
     
     status = IoCreateDevice(DriverObject, sizeof(FILTER_EXTENSION),
@@ -134,17 +131,16 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
     return STATUS_SUCCESS;
 }
 
-// Получение номера диска из имени устройства (исправлено: _wtoi -> wcstoul)
+// Получение номера диска из имени устройства
 ULONG GetDiskNumber(PDEVICE_OBJECT DeviceObject) {
-    // Парсим \Device\HarddiskVolumeX или \Device\HarddiskX\DRY
     WCHAR* name = DeviceObject->DriverObject->DriverName.Buffer;
     ULONG number = 0xFFFFFFFF;
     
     if (wcsstr(name, L"Harddisk")) {
         WCHAR* ptr = wcsstr(name, L"Harddisk");
         if (ptr) {
-            ptr += 8; // Длина "Harddisk"
-            number = wcstoul(ptr, NULL, 10);  // исправлено: _wtoi -> wcstoul
+            ptr += 8;
+            number = wcstoul(ptr, NULL, 10);
         }
     }
     return number;
@@ -159,10 +155,8 @@ NTSTATUS AttachToAllDisks(PDRIVER_OBJECT DriverObject) {
     WCHAR buffer[64];
     ULONG i;
     
-    // Перебираем диски от 0 до 63
     for (i = 0; i < 64; i++) {
-        // Пробуем HarddiskX\DR0 (физический диск)
-        RtlStringCchPrintfW(buffer, 64, L"\\Device\\Harddisk%lu\\DR0", i);
+        swprintf(buffer, 64, L"\\Device\\Harddisk%lu\\DR0", i);
         RtlInitUnicodeString(&deviceName, buffer);
         
         status = IoGetDeviceObjectPointer(&deviceName, FILE_ANY_ACCESS, 
@@ -172,14 +166,12 @@ NTSTATUS AttachToAllDisks(PDRIVER_OBJECT DriverObject) {
             ObDereferenceObject(fileObject);
         }
         
-        // Пробуем HarddiskVolumeX
-        RtlStringCchPrintfW(buffer, 64, L"\\Device\\HarddiskVolume%lu", i);
+        swprintf(buffer, 64, L"\\Device\\HarddiskVolume%lu", i);
         RtlInitUnicodeString(&deviceName, buffer);
         
         status = IoGetDeviceObjectPointer(&deviceName, FILE_ANY_ACCESS, 
                                           &fileObject, &diskDevice);
         if (NT_SUCCESS(status)) {
-            // Определяем реальный номер диска
             ULONG diskNum = GetDiskNumber(diskDevice);
             if (diskNum != 0xFFFFFFFF) {
                 CreateFilterDevice(DriverObject, diskDevice, diskNum);
@@ -199,7 +191,7 @@ NTSTATUS DispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     
     switch (code) {
         case IOCTL_STORAGE_GET_DEVICE_NUMBER:
-        case 0x80000000: // IOCTL_GET_ATTEMPTS
+        case 0x80000000:
         {
             PFILTER_EXTENSION ext = (PFILTER_EXTENSION)DeviceObject->DeviceExtension;
             if (Irp->AssociatedIrp.SystemBuffer && 
@@ -250,11 +242,9 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     DbgPrint("[DBT] DBT MBR Protector loading...\n");
     DbgPrint("[DBT] RegistryPath: %wZ\n", RegistryPath);
     
-    // Инициализация глобальной блокировки
     KeInitializeSpinLock(&g_GlobalLock);
     g_GlobalAttempts = 0;
     
-    // Установка обработчиков
     for (i = 0; i < IRP_MJ_MAXIMUM_FUNCTION; i++) {
         DriverObject->MajorFunction[i] = DispatchPassThrough;
     }
@@ -263,11 +253,9 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DispatchDeviceControl;
     DriverObject->DriverUnload = DriverUnload;
     
-    // Создание симлинка
     RtlInitUnicodeString(&symLinkName, SYM_LINK_NAME);
     IoCreateSymbolicLink(&symLinkName, &symLinkName);
     
-    // Аттачимся ко всем дискам
     AttachToAllDisks(DriverObject);
     
     DbgPrint("[DBT] DBT MBR Protector loaded successfully.\n");
