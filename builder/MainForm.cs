@@ -627,6 +627,7 @@ start:
     mov dx, 0x184F
     int 0x10
 
+    ; ЗАГРУЗКА ШРИФТА (СЕКТОРА 3-4)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x1000
@@ -643,6 +644,7 @@ start:
     mov bx, 0x0100
     int 0x10
 
+    ; ЗАГРУЗКА ЗАГОЛОВКА (СЕКТОР 5)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
@@ -658,6 +660,7 @@ start:
     mov si, 0x9000
     call print
 
+    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 6)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9200
@@ -676,7 +679,8 @@ start:
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
-    mov dl, 0    int 0x10
+    mov dl, 0
+    int 0x10
 
     mov si, msg_prompt
     call print
@@ -736,16 +740,6 @@ restore_mbr:
     ret
 
 load_os:
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x7C00
-    mov ah, 0x02
-    mov al, 1
-    mov ch, 0
-    mov cl, 1
-    mov dh, 0
-    mov dl, 0x80
-    int 0x13
     jmp 0x0000:0x7C00
 
 print:
@@ -778,7 +772,7 @@ get_password:
     mov ah, 0x0E
     mov bh, 0x00
     mov bl, 0x07
-    mov al, [di - 1]
+    mov al, '*'
     int 0x10
     jmp .loop
 .backspace:
@@ -813,8 +807,9 @@ check_password:
     lodsb
     or al, al
     jz .check_end
-    cmpsb
+    cmp al, [di]
     jne .fail
+    inc di
     jmp .compare
 .check_end:
     cmp byte [di], 0
