@@ -118,32 +118,38 @@ jobs:
         copy scr\dbt_mbr_protector.inf artifacts\${{ matrix.arch }}\
         echo Driver build complete for ${{ matrix.arch }}!
         
-    - name: Build Notifier (x64 only)
-      if: matrix.arch == 'x64'
+    - name: Build Notifier (${{ matrix.arch }})
       shell: cmd
       run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.msvc_arch }}
         
-        mkdir artifacts\x64 2>nul
+        mkdir artifacts\${{ matrix.arch }} 2>nul
+        
+        set "WDK_INC=C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%"
+        set "WDK_LIB=C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%"
+        
+        set "UM_LIBPATH=%WDK_LIB%\%wdk_arch%"
         
         cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_AMD64_ ^
-          /D_WIN64 ^
+          /I"%WDK_INC%\um" ^
+          /D${{ matrix.def_arch }} ^
+          /D${{ matrix.win_bits }} ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
           notifier\dbt_notifier.cpp ^
-          /Foartifacts\x64\dbt_notifier.obj
+          /Foartifacts\${{ matrix.arch }}\dbt_notifier.obj
         
-        if not exist artifacts\x64\dbt_notifier.obj (
-          echo ERROR: Notifier compilation failed!
+        if not exist artifacts\${{ matrix.arch }}\dbt_notifier.obj (
+          echo ERROR: Notifier compilation failed for ${{ matrix.arch }}!
           exit /b 1
         )
         
-        link /MACHINE:X64 /OUT:artifacts\x64\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x64" ^
-          artifacts\x64\dbt_notifier.obj ^
+        link /MACHINE:${{ matrix.machine }} /OUT:artifacts\${{ matrix.arch }}\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
+          /LIBPATH:"%UM_LIBPATH%" ^
+          artifacts\${{ matrix.arch }}\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
-        echo Notifier build complete!
+        echo Notifier build complete for ${{ matrix.arch }}!
         
     - name: Sign Driver (${{ matrix.arch }})
       shell: pwsh
@@ -179,11 +185,6 @@ jobs:
       run: |
         $arch = "${{ matrix.arch }}"
         $dest = "artifacts\$arch"
-        
-        # Скопируем notifier в каждую папку (если есть)
-        if (Test-Path "artifacts\x64\dbt_notifier.exe") {
-          Copy-Item "artifacts\x64\dbt_notifier.exe" "$dest\" -Force -ErrorAction SilentlyContinue
-        }
         
         $installBat = @"
         @echo off
@@ -299,7 +300,7 @@ jobs:
         ------
         dbt_mbr_protector.sys  : Kernel-mode filter driver ($arch)
         dbt_mbr_protector.inf  : Driver installation file
-        dbt_notifier.exe       : User-mode notification service (if present)
+        dbt_notifier.exe       : User-mode notification service ($arch)
         install.bat            : Automated installation script
         uninstall.bat          : Automated removal script
         
