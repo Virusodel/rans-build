@@ -15,10 +15,10 @@ start:
     mov ax, 0x0003
     int 0x10
 
-    ; Очистка экрана (фон)
+    ; Очистка экрана (ФОН ВСЕГО ЭКРАНА!)
     mov ah, 0x06
     mov al, 0
-    mov bh, 0x00
+    mov bh, 0x00   ; ← БИЛДЕР ЗАМЕНЯЕТ ЭТО
     mov cx, 0
     mov dx, 0x184F
     int 0x10
@@ -73,7 +73,7 @@ start:
     mov si, 0x9200
     call print
 
-    ; Курсор вниз и вывод Password (только 1 раз!)
+    ; Курсор вниз и вывод Password
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -89,15 +89,14 @@ password_loop:
     cmp byte [password_ok], 1
     je restore_and_boot
     
-    ; Выводим Wrong password! (курсор не двигаем)
     mov si, msg_wrong
     call print
     
-    ; Возвращаем курсор на строку с Password:
+    ; Возврат курсора на строку с Password:
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
-    mov dl, 9          ; Длина "Password: " = 9 символов
+    mov dl, 9
     int 0x10
 
     jmp password_loop
@@ -157,8 +156,7 @@ print:
     or al, al
     jz .done
     mov ah, 0x0E
-    mov bh, 0x00
-    mov bl, 0x07
+    mov bl, 0x07   ; ← ТОЛЬКО ЦВЕТ ТЕКСТА
     int 0x10
     jmp print
 .done:
@@ -180,8 +178,7 @@ get_password:
     je .loop
     stosb
     mov ah, 0x0E
-    mov bh, 0x00
-    mov bl, 0x07
+    mov bl, 0x07   ; ← ТОЛЬКО ЦВЕТ ТЕКСТА
     mov al, [di - 1]
     int 0x10
     jmp .loop
@@ -190,8 +187,7 @@ get_password:
     je .loop
     dec di
     mov ah, 0x0E
-    mov bh, 0x00
-    mov bl, 0x07
+    mov bl, 0x07   ; ← ТОЛЬКО ЦВЕТ ТЕКСТА
     mov al, 0x08
     int 0x10
     mov al, ' '
@@ -202,8 +198,7 @@ get_password:
 .done:
     mov byte [di], 0
     mov ah, 0x0E
-    mov bh, 0x00
-    mov bl, 0x07
+    mov bl, 0x07   ; ← ТОЛЬКО ЦВЕТ ТЕКСТА
     mov al, 0x0A
     int 0x10
     mov al, 0x0D
