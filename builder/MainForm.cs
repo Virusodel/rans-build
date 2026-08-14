@@ -710,7 +710,7 @@ password_loop:
     mov si, msg_wrong
     call print
     
-    ; ВОЗВРАЩАЕМ КУРСОР НА Password: (СТРОКА 24, ПОСЛЕ "Password: ")
+    ; ВОЗВРАЩАЕМ КУРСОР НА Password: (СТРОКА 24, ПОСЛЕ ""Password: "")
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -856,7 +856,7 @@ msg_wrong:
 msg_error:
     db 'Load error!',0
 clear_line:
-    db '               ',13,10,0   ; 15 пробелов для стирания
+    db '               ',13,10,0
 
 password:
     db {PASSWORD_HEX}
