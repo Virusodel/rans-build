@@ -11,11 +11,9 @@ start:
     mov sp, 0x7C00
     sti
 
-    ; Установка видеорежима
     mov ax, 0x0003
     int 0x10
 
-    ; Очистка экрана (фон)
     mov ah, 0x06
     mov al, 0
     mov bh, 0x00
@@ -23,7 +21,6 @@ start:
     mov dx, 0x184F
     int 0x10
 
-    ; Загрузка шрифта (сектора 3-10)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x1000
@@ -36,12 +33,10 @@ start:
     int 0x13
     jc load_error
 
-    ; Загрузка шрифта в BIOS
     mov ax, 0x1100
     mov bx, 0x0100
     int 0x10
 
-    ; Загрузка заголовка (сектор 11)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
@@ -57,7 +52,6 @@ start:
     mov si, 0x9000
     call print
 
-    ; Загрузка текста (сектор 12)
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9200
@@ -73,7 +67,7 @@ start:
     mov si, 0x9200
     call print
 
-    ; КУРСОР В ЛЕВЫЙ НИЖНИЙ УГОЛ (СТРОКА 24)
+    ; КУРСОР В ЛЕВЫЙ НИЖНИЙ УГОЛ
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -89,7 +83,7 @@ password_loop:
     cmp byte [password_ok], 1
     je restore_and_boot
     
-    ; СТИРАЕМ СТАРУЮ НАДПИСЬ WRONG PASSWORD!
+    ; СТИРАЕМ СТАРУЮ НАДПИСЬ WRONG PASSWORD! (СТРОКА 25)
     mov ah, 0x02
     mov bh, 0
     mov dh, 25
@@ -99,17 +93,11 @@ password_loop:
     mov si, clear_line
     call print
     
-    ; ВОЗВРАЩАЕМ КУРСОР НА СТРОКУ 25 ДЛЯ НОВОЙ НАДПИСИ
-    mov ah, 0x02
-    mov bh, 0
-    mov dh, 25
-    mov dl, 0
-    int 0x10
-    
+    ; ВЫВОДИМ НОВУЮ НАДПИСЬ WRONG PASSWORD! (СТРОКА 25)
     mov si, msg_wrong
     call print
     
-    ; ВОЗВРАЩАЕМ КУРСОР НА Password: (СТРОКА 24, ПОСЛЕ "Password: ")
+    ; ВОЗВРАЩАЕМ КУРСОР НА ПАРОЛЬ (СТРОКА 24, ПОСЛЕ "Password: ")
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -182,7 +170,7 @@ print:
 
 get_password:
     mov di, buffer
-    mov cx, 64
+    mov cx, 32
 .loop:
     xor ax, ax
     int 0x16
@@ -192,7 +180,7 @@ get_password:
     je .backspace
     cmp al, 0x7F
     je .backspace
-    cmp di, buffer + 64
+    cmp di, buffer + 32
     je .loop
     stosb
     mov ah, 0x0E
@@ -255,13 +243,13 @@ msg_wrong:
 msg_error:
     db 'Load error!',0
 clear_line:
-    db '               ',13,10,0   ; 15 пробелов для стирания
+    db '               ',13,10,0
 
 password:
     db {PASSWORD_HEX}
 
 buffer:
-    times 64 db 0
+    times 32 db 0
 password_ok:
     db 0
 
