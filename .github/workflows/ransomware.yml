@@ -28,7 +28,7 @@ jobs:
         if ($ntddk) {
           Write-Host "Found ntddk.h at: $($ntddk.Directory.FullName)"
           $version = $ntddk.Directory.Parent.Name
-          Write-Host "WDK Version: $version"
+          Write-Host " WDK Version: $version"
           echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
         } else {
           Write-Host "ntddk.h not found!"
@@ -48,7 +48,7 @@ jobs:
           if (Test-Path $file) {
             Write-Host "$file found"
           } else {
-            Write-Host "$file MISSING"
+            Write-Host " $file MISSING"
             exit 1
           }
         }
@@ -62,18 +62,34 @@ jobs:
         :: Создание директории
         mkdir scr\obj 2>nul
         
-        :: Компиляция драйвера (используем найденную версию WDK)
+        :: Компиляция драйвера с правильными макросами
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\winrt" ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\ucrt" ^
+          /D_AMD64_ ^
+          /DAMD64 ^
+          /D_WIN64 ^
+          /D_X86_=1 ^
           /D_WIN32_WINNT=0x0A00 ^
           /DWINVER=0x0A00 ^
-          /D_WIN64 ^
-          /DAMD64 ^
           /DNTDDI_VERSION=0x0A000007 ^
+          /D_WIN32_FOUNDATION=1 ^
+          /D_WIN32_WINNT_WIN10=0x0A00 ^
+          /D_WIN32_WINNT_WINTHRESHOLD=0x0A00 ^
+          /D_WIN32_WINNT_WINBLUE=0x0602 ^
+          /D_WIN32_WINNT_WIN8=0x0602 ^
+          /D_WIN32_WINNT_WIN7=0x0601 ^
+          /D_WIN32_WINNT_VISTA=0x0600 ^
+          /D_WIN32_WINNT_WS03=0x0502 ^
+          /D_WIN32_WINNT_LONGHORN=0x0600 ^
+          /D_WIN32_WINNT_NT4=0x0400 ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          /D_WIN32_IE=0x0700 ^
+          /DNTDDI_VERSION=0x06010000 ^
           scr\dbt_mbr_protector.c ^
           /Foscr\obj\dbt_mbr_protector.obj
         
@@ -111,6 +127,9 @@ jobs:
         :: Компиляция notifier
         cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
+          /D_AMD64_ ^
+          /DAMD64 ^
+          /D_WIN64 ^
           notifier\dbt_notifier.cpp ^
           /Fonotifier\obj\dbt_notifier.obj
         
@@ -175,9 +194,9 @@ jobs:
         foreach ($file in $files) {
           if (Test-Path $file) {
             Copy-Item $file artifacts\
-            Write-Host "Copied $file"
+            Write-Host " Copied $file"
           } else {
-            Write-Host "WARNING: $file not found"
+            Write-Host " WARNING: $file not found"
           }
         }
         
