@@ -838,7 +838,7 @@ password_ok:
 
 times 510 - ($ - $$) db 0
 dw 0xAA55";
-}
+            }
 
             // ============================================================
             // ЗАМЕНА ПАРОЛЯ
@@ -861,49 +861,46 @@ dw 0xAA55";
             template = template.Replace("{PASSWORD_HEX}", passwordHex + ", 0x00");
 
             // ============================================================
-            // ЗАМЕНА ЦВЕТОВ (ПРАВИЛЬНО!)
+            // ЗАМЕНА ЦВЕТОВ
             // ============================================================
-            // Цвет текста для вывода (mov bl)
-            string textColor = "07"; // Light Gray (по умолчанию)
+            string textColor = "07";
             switch (this.cmbTextColor.SelectedIndex)
             {
-                case 0: textColor = "00"; break; // Black
-                case 1: textColor = "01"; break; // Blue
-                case 2: textColor = "02"; break; // Green
-                case 3: textColor = "03"; break; // Cyan
-                case 4: textColor = "04"; break; // Red
-                case 5: textColor = "05"; break; // Magenta
-                case 6: textColor = "06"; break; // Brown
-                case 7: textColor = "07"; break; // Light Gray
-                case 8: textColor = "08"; break; // Dark Gray
-                case 9: textColor = "09"; break; // Light Blue
-                case 10: textColor = "0A"; break; // Light Green
-                case 11: textColor = "0B"; break; // Light Cyan
-                case 12: textColor = "0C"; break; // Light Red
-                case 13: textColor = "0D"; break; // Light Magenta
-                case 14: textColor = "0E"; break; // Yellow
-                case 15: textColor = "0F"; break; // White
+                case 0: textColor = "00"; break;
+                case 1: textColor = "01"; break;
+                case 2: textColor = "02"; break;
+                case 3: textColor = "03"; break;
+                case 4: textColor = "04"; break;
+                case 5: textColor = "05"; break;
+                case 6: textColor = "06"; break;
+                case 7: textColor = "07"; break;
+                case 8: textColor = "08"; break;
+                case 9: textColor = "09"; break;
+                case 10: textColor = "0A"; break;
+                case 11: textColor = "0B"; break;
+                case 12: textColor = "0C"; break;
+                case 13: textColor = "0D"; break;
+                case 14: textColor = "0E"; break;
+                case 15: textColor = "0F"; break;
             }
 
-            // Цвет фона + текста для очистки экрана (mov bh)
-            string bgColor = "00"; // Black
+            string bgColor = "00";
             switch (this.cmbBgColor.SelectedIndex)
             {
-                case 0: bgColor = "00"; break; // Black
-                case 1: bgColor = "10"; break; // Blue
-                case 2: bgColor = "20"; break; // Green
-                case 3: bgColor = "30"; break; // Cyan
-                case 4: bgColor = "40"; break; // Red
-                case 5: bgColor = "50"; break; // Magenta
-                case 6: bgColor = "60"; break; // Brown
-                case 7: bgColor = "70"; break; // Light Gray
+                case 0: bgColor = "00"; break;
+                case 1: bgColor = "10"; break;
+                case 2: bgColor = "20"; break;
+                case 3: bgColor = "30"; break;
+                case 4: bgColor = "40"; break;
+                case 5: bgColor = "50"; break;
+                case 6: bgColor = "60"; break;
+                case 7: bgColor = "70"; break;
             }
 
-            string combinedColor = bgColor + textColor;
+            // Заменяем фон (ТОЛЬКО ЦВЕТ ФОНА)
+            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
 
-            // Заменяем цвет фона при очистке экрана (mov bh)
-            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + combinedColor);
-            // Заменяем цвет текста при выводе (mov bl) во всех местах
+            // Заменяем цвет текста
             template = template.Replace("mov bl, 0x07", "mov bl, 0x" + textColor);
 
             // BSOD
