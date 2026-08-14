@@ -73,7 +73,7 @@ mov si,msg_prompt
 call print
 password_loop:
 mov di,buffer
-mov cx,32
+mov cx,24
 xor al,al
 rep stosb
 call get_password
@@ -145,7 +145,7 @@ jmp print
 ret
 get_password:
 mov di,buffer
-mov cx,32
+mov cx,24
 .loop:
 xor ax,ax
 int 0x16
@@ -155,7 +155,7 @@ cmp al,0x08
 je .backspace
 cmp al,0x7F
 je .backspace
-cmp di,buffer+32
+cmp di,buffer+24
 je .loop
 stosb
 mov ah,0x0E
@@ -215,7 +215,7 @@ msg_prompt: db 'Password: ',0
 msg_wrong: db 13,10,'Wrong password!',13,10,0
 msg_error: db 'Load error!',0
 password: db {PASSWORD_HEX}
-buffer: times 32 db 0
+buffer: times 24 db 0
 password_ok: db 0
 times 510 - ($ - $$) db 0
 dw 0xAA55
