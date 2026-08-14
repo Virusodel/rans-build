@@ -17,15 +17,12 @@ jobs:
       with:
         vs-version: '17.0'
         
-    - name: Install Windows SDK (once)
+    - name: Install Windows SDK
       shell: pwsh
       run: |
         choco install windows-sdk-10-version-2004-windbg -y
-        choco install wdk -y
         
-        # Проверка наличия файлов
-        Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
-        
+        # WDK уже есть в образе, просто находим версию
         $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
         if ($ntddk) {
           $version = $ntddk.Directory.Parent.Name
@@ -36,7 +33,7 @@ jobs:
           exit 1
         }
         
-        # Проверка библиотек для всех архитектур
+        # Проверка библиотек
         Write-Host "Checking libraries..."
         Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" -Recurse -Filter "ntoskrnl.lib" | Select-Object FullName
         
@@ -87,7 +84,7 @@ jobs:
         )
         
         link /MACHINE:X64 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x64\dbt_mbr_protector.sys ^
-          /LIBPATH:"%WDK_LIB%\km\x64" ^
+          /LIBPATH:"%WDK_LIB%\%WDK_VERSION%\km\x64" ^
           artifacts\x64\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
@@ -112,7 +109,7 @@ jobs:
         )
         
         link /MACHINE:X64 /OUT:artifacts\x64\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"%WDK_LIB%\um\x64" ^
+          /LIBPATH:"%WDK_LIB%\%WDK_VERSION%\um\x64" ^
           artifacts\x64\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
@@ -153,7 +150,7 @@ jobs:
         )
         
         link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x86\dbt_mbr_protector.sys ^
-          /LIBPATH:"%WDK_LIB%\km\x86" ^
+          /LIBPATH:"%WDK_LIB%\%WDK_VERSION%\km\x86" ^
           artifacts\x86\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
@@ -178,7 +175,7 @@ jobs:
         )
         
         link /MACHINE:X86 /OUT:artifacts\x86\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"%WDK_LIB%\um\x86" ^
+          /LIBPATH:"%WDK_LIB%\%WDK_VERSION%\um\x86" ^
           artifacts\x86\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
@@ -219,7 +216,7 @@ jobs:
         )
         
         link /MACHINE:ARM64 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\arm64\dbt_mbr_protector.sys ^
-          /LIBPATH:"%WDK_LIB%\km\arm64" ^
+          /LIBPATH:"%WDK_LIB%\%WDK_VERSION%\km\arm64" ^
           artifacts\arm64\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
@@ -244,7 +241,7 @@ jobs:
         )
         
         link /MACHINE:ARM64 /OUT:artifacts\arm64\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"%WDK_LIB%\um\arm64" ^
+          /LIBPATH:"%WDK_LIB%\%WDK_VERSION%\um\arm64" ^
           artifacts\arm64\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
