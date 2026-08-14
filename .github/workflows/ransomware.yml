@@ -1,4 +1,4 @@
-name: Build Kernel Driver with EWDK
+name: Build with EWDK ISO
 
 on: workflow_dispatch
 
@@ -7,37 +7,34 @@ jobs:
     runs-on: windows-2022
     
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+    
     - name: Download EWDK ISO
       shell: pwsh
       run: |
-        # Прямая ссылка на EWDK (актуальная)
-        $url = "https://download.microsoft.com/download/9/4/1/941c1c7a-afae-4932-a5fc-9008caf193d0/EWDK_22621_240228.msi"
-        $msiPath = "$env:TEMP\ewdk.msi"
-        Invoke-WebRequest -Uri $url -OutFile $msiPath
+        $url = "https://go.microsoft.com/fwlink/?linkid=2269817"
+        $isoPath = "$env:TEMP\ewdk.iso"
+        Invoke-WebRequest -Uri $url -OutFile $isoPath -UseBasicParsing
         
-        # Установка
-        msiexec /i $msiPath /quiet /qn /norestart INSTALLDIR="C:\EWDK"
+        # Монтирование
+        $mount = Mount-DiskImage -ImagePath $isoPath -PassThru
+        $driveLetter = ($mount | Get-Volume).DriveLetter
+        
+        # Копирование
+        Copy-Item -Path "$driveLetter`:\*" -Destination "C:\EWDK" -Recurse -Force
+        
+        Dismount-DiskImage -ImagePath $isoPath
         
         echo "C:\EWDK\bin" >> $env:GITHUB_PATH
         
-    - name: Build with EWDK
+    - name: Build
       shell: cmd
       run: |
-        call "C:\EWDK\BuildEnv\setenv.bat" /x64 /fre /build
+        call C:\EWDK\BuildEnv\setenv.bat /x64 /fre /build
         cd src
         build -cZ
         
-    - name: Collect build artifacts
-      shell: pwsh
-      run: |
-        Get-ChildItem -Path src -Recurse -Filter "*.sys" | Copy-Item -Destination src\obj\ -Force
-        Get-ChildItem -Path src -Recurse -Filter "*.inf" | Copy-Item -Destination src\obj\ -Force
-        
-    - name: Upload
-      uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v4
       with:
-        name: driver-kernel
-        path: src\obj\*
+        name: driver
+        path: src\obj\*.sys
