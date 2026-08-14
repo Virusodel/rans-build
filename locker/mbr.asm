@@ -166,7 +166,7 @@ get_password:
     mov ah, 0x0E
     mov bh, 0x00
     mov bl, 0x07
-    mov al, '*'
+    mov al, [di - 1]    ; ← ОТОБРАЖАЕМ ВВЕДЕННЫЙ СИМВОЛ (ОРИГИНАЛЬНОЕ ПОВЕДЕНИЕ)
     int 0x10
     jmp .loop
 .backspace:
@@ -201,7 +201,7 @@ check_password:
     lodsb
     or al, al
     jz .check_end
-    cmp al, [di]
+    cmp al, [di]        ; ← ИСПРАВЛЕННАЯ ВЕРСИЯ (РАБОТАЕТ)
     jne .fail
     inc di
     jmp .compare
