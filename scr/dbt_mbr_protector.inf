@@ -1,10 +1,11 @@
-; DBT MBR Protector - Filter Driver for MBR Write Protection
+; DBT MBR Protector - Enhanced Filter Driver
+; Supports x86, x64, ARM64
 [Version]
 Signature="$WINDOWS NT$"
 Class=Disk
 ClassGuid={4D36E967-E325-11CE-BFC1-08002BE10318}
 Provider=%ProviderName%
-DriverVer=08/14/2026,1.0.0.0
+DriverVer=08/14/2026,2.0.0.0
 CatalogFile=dbt_mbr_protector.cat
 
 [DestinationDirs]
@@ -16,10 +17,23 @@ DefaultDestDir = 12
 [SourceDisksFiles]
 dbt_mbr_protector.sys = 1
 
+; Производители и архитектуры
+[Manufacturer]
+%ProviderName% = DbtMbrProtector,NTamd64,NTx86,NTarm64
+
+[DbtMbrProtector.NTamd64]
+%ServiceDesc% = DefaultInstall, 0
+
+[DbtMbrProtector.NTx86]
+%ServiceDesc% = DefaultInstall, 0
+
+[DbtMbrProtector.NTarm64]
+%ServiceDesc% = DefaultInstall, 0
+
 [DefaultInstall]
 OptionDesc = %ServiceDesc%
 CopyFiles = DriverFiles
-AddReg = AddRegistry
+AddReg = AddRegistry, AddLanguage
 
 [DefaultInstall.Services]
 AddService = DbtMbrProtector, %SPSVCINST_ASSOCSERVICE%, DbtMbrProtector_Service
@@ -27,16 +41,24 @@ AddService = DbtMbrProtector, %SPSVCINST_ASSOCSERVICE%, DbtMbrProtector_Service
 [DriverFiles]
 dbt_mbr_protector.sys
 
+; Реестр с параметрами
 [AddRegistry]
 HKR, "Parameters", "Logging", 0x00010001, 1
 HKR, "Parameters", "BlockMBR", 0x00010001, 1
 HKR, "Parameters", "NotifyUser", 0x00010001, 1
+HKR, "Parameters", "EnhancedProtection", 0x00010001, 1
+HKR, "Parameters", "ProtectedSectors", 0x00010001, 10
+HKR, "Parameters", "Language", 0x00010001, 0
+
+; Настройка языка
+[AddLanguage]
+HKR, "Parameters", "Language", 0x00010001, 0
 
 [DbtMbrProtector_Service]
 DisplayName = %ServiceName%
-ServiceType = 2 ; SERVICE_FILE_SYSTEM_DRIVER
-StartType = 0 ; SERVICE_BOOT_START
-ErrorControl = 1 ; SERVICE_ERROR_NORMAL
+ServiceType = 2
+StartType = 0
+ErrorControl = 1
 ServiceBinary = %12%\dbt_mbr_protector.sys
 LoadOrderGroup = SCSI Filter
 AddReg = ServiceAddRegistry
@@ -46,7 +68,7 @@ HKR, "Parameters", "FilterType", 0x00010001, 0x00000001
 
 [Strings]
 ProviderName = "DBT Security"
-ServiceDesc = "MBR Write Protection Filter Driver"
+ServiceDesc = "Enhanced MBR Write Protection Filter Driver"
 ServiceName = "DBT MBR Protector"
 DiskName = "DBT MBR Protector Installation Disk"
 SPSVCINST_ASSOCSERVICE = 0x00000002
