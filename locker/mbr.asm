@@ -11,9 +11,11 @@ start:
     mov sp, 0x7C00
     sti
 
+    ; Устанавливаем видеорежим
     mov ax, 0x0003
     int 0x10
 
+    ; Очищаем экран с черным фоном (цвет потом поменяем через билдер)
     mov ah, 0x06
     mov al, 0
     mov bh, 0x00
@@ -21,29 +23,16 @@ start:
     mov dx, 0x184F
     int 0x10
 
-    mov ax, 0x0000
-    mov es, ax
-    mov bx, 0x1000
-    mov ah, 0x02
-    mov al, 2
-    mov ch, 0
-    mov cl, 3
-    mov dh, 0
-    mov dl, 0x80
-    int 0x13
-    jc load_error
-
-    mov ax, 0x1100
-    mov bx, 0x0100
-    int 0x10
-
+    ; ============================================================
+    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 11, 512 БАЙТ)
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
     mov ah, 0x02
-    mov al, 2
+    mov al, 1
     mov ch, 0
-    mov cl, 5
+    mov cl, 11
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -52,6 +41,9 @@ start:
     mov si, 0x9000
     call print
 
+    ; ============================================================
+    ; ВЫВОД "Password: "
+    ; ============================================================
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
