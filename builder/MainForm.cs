@@ -674,7 +674,7 @@ start:
     mov si, 0x9200
     call print
 
-    ; Курсор вниз и вывод Password
+    ; КУРСОР В ЛЕВЫЙ НИЖНИЙ УГОЛ (СТРОКА 24)
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -690,10 +690,27 @@ password_loop:
     cmp byte [password_ok], 1
     je restore_and_boot
     
+    ; СТИРАЕМ СТАРУЮ НАДПИСЬ WRONG PASSWORD!
+    mov ah, 0x02
+    mov bh, 0
+    mov dh, 25
+    mov dl, 0
+    int 0x10
+    
+    mov si, clear_line
+    call print
+    
+    ; ВОЗВРАЩАЕМ КУРСОР НА СТРОКУ 25 ДЛЯ НОВОЙ НАДПИСИ
+    mov ah, 0x02
+    mov bh, 0
+    mov dh, 25
+    mov dl, 0
+    int 0x10
+    
     mov si, msg_wrong
     call print
     
-    ; Возврат курсора на строку с Password:
+    ; ВОЗВРАЩАЕМ КУРСОР НА Password: (СТРОКА 24, ПОСЛЕ "Password: ")
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -835,9 +852,11 @@ hang:
 msg_prompt:
     db 'Password: ',0
 msg_wrong:
-    db 13,10,'Wrong password!',13,10,0
+    db 'Wrong password!',13,10,0
 msg_error:
     db 'Load error!',0
+clear_line:
+    db '               ',13,10,0   ; 15 пробелов для стирания
 
 password:
     db {PASSWORD_HEX}
