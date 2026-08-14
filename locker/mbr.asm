@@ -16,7 +16,7 @@ start:
 
     mov ah, 0x06
     mov al, 0
-    mov bh, 0x00
+    mov bh, BG_COLOR
     mov cx, 0
     mov dx, 0x184F
     int 0x10
@@ -121,7 +121,7 @@ print:
     jz .done
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, FG_COLOR
     int 0x10
     jmp print
 .done:
@@ -143,7 +143,7 @@ get_password:
     stosb
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, FG_COLOR
     mov al, [di - 1]
     int 0x10
     jmp .loop
@@ -153,7 +153,7 @@ get_password:
     dec di
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, FG_COLOR
     mov al, 0x08
     int 0x10
     mov al, ' '
@@ -165,7 +165,7 @@ get_password:
     mov byte [di], 0
     mov ah, 0x0E
     mov bh, 0x00
-    mov bl, 0x07
+    mov bl, FG_COLOR
     mov al, 0x0A
     int 0x10
     mov al, 0x0D
