@@ -9,6 +9,32 @@ jobs:
   build:
     runs-on: windows-2022
     
+    strategy:
+      matrix:
+        arch: [x64, x86, arm64]
+        include:
+          - arch: x64
+            msvc_arch: x64
+            wdk_arch: x64
+            machine: X64
+            platform: x64
+            def_arch: _AMD64_
+            win_bits: _WIN64
+          - arch: x86
+            msvc_arch: x86
+            wdk_arch: x86
+            machine: X86
+            platform: Win32
+            def_arch: _X86_
+            win_bits: _WIN32
+          - arch: arm64
+            msvc_arch: arm64
+            wdk_arch: arm64
+            machine: ARM64
+            platform: ARM64
+            def_arch: _ARM64_
+            win_bits: _WIN64
+    
     steps:
     - uses: actions/checkout@v4
     
@@ -50,42 +76,51 @@ jobs:
           }
         }
         
-    - name: Build Kernel Driver
+    - name: Build Kernel Driver (${{ matrix.arch }})
       shell: cmd
       run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.msvc_arch }}
         
-        mkdir scr\obj 2>nul
+        mkdir scr\obj_${{ matrix.arch }} 2>nul
+        
+        set "WDK_INC=C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%"
+        set "WDK_LIB=C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%"
         
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_AMD64_ ^
-          /D_WIN64 ^
+          /I"%WDK_INC%\km" ^
+          /I"%WDK_INC%\shared" ^
+          /I"%WDK_INC%\um" ^
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
           /DNTDDI_VERSION=0x06010000 ^
+          /D${{ matrix.def_arch }} ^
+          /D${{ matrix.win_bits }} ^
+          /DDBT_MULTI_ARCH ^
           scr\dbt_mbr_protector.c ^
-          /Foscr\obj\dbt_mbr_protector.obj
+          /Foscr\obj_${{ matrix.arch }}\dbt_mbr_protector.obj
         
-        if not exist scr\obj\dbt_mbr_protector.obj (
-          echo ERROR: Compilation failed!
+        if not exist scr\obj_${{ matrix.arch }}\dbt_mbr_protector.obj (
+          echo ERROR: Compilation failed for ${{ matrix.arch }}!
           exit /b 1
         )
         
-        link /MACHINE:X64 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:scr\obj\dbt_mbr_protector.sys ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x64" ^
-          scr\obj\dbt_mbr_protector.obj ^
+        set "WDK_LIBPATH=%WDK_LIB%\%wdk_arch%"
+        
+        link /MACHINE:${{ matrix.machine }} ^
+          /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE ^
+          /OUT:scr\obj_${{ matrix.arch }}\dbt_mbr_protector.sys ^
+          /LIBPATH:"%WDK_LIBPATH%\km" ^
+          /LIBPATH:"%WDK_LIBPATH%\ucrt" ^
+          scr\obj_${{ matrix.arch }}\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
-        if not exist scr\obj\dbt_mbr_protector.sys (
-          echo ERROR: Linking failed!
+        if not exist scr\obj_${{ matrix.arch }}\dbt_mbr_protector.sys (
+          echo ERROR: Linking failed for ${{ matrix.arch }}!
           exit /b 1
         )
         
-        copy scr\dbt_mbr_protector.inf scr\obj\
-        echo Driver build complete!
+        copy scr\dbt_mbr_protector.inf scr\obj_${{ matrix.arch }}\
+        echo Driver build complete for ${{ matrix.arch }}!
         
     - name: Build Notifier
       shell: cmd
@@ -113,10 +148,10 @@ jobs:
         
         echo Notifier build complete!
         
-    - name: Sign Driver
+    - name: Sign Driver (${{ matrix.arch }})
       shell: pwsh
       run: |
-        $sysPath = "scr\obj\dbt_mbr_protector.sys"
+        $sysPath = "scr\obj_${{ matrix.arch }}\dbt_mbr_protector.sys"
         
         if (-not (Test-Path $sysPath)) {
           Write-Host "ERROR: Driver not found for signing!"
@@ -130,11 +165,11 @@ jobs:
         $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" | Select-Object -First 1
         
         if ($signtool) {
-          Write-Host "Signing driver..."
+          Write-Host "Signing driver for ${{ matrix.arch }}..."
           & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com $sysPath
           
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Driver signed successfully!"
+            Write-Host "Driver signed successfully for ${{ matrix.arch }}!"
           } else {
             Write-Host "Signing failed with code $LASTEXITCODE"
           }
@@ -142,33 +177,38 @@ jobs:
           Write-Host "WARNING: signtool not found, driver will be unsigned"
         }
         
-    - name: Create Installation Package
+    - name: Create Installation Package (${{ matrix.arch }})
       shell: pwsh
       run: |
-        New-Item -ItemType Directory -Force -Path artifacts
+        New-Item -ItemType Directory -Force -Path artifacts_${{ matrix.arch }}
         
         $files = @(
-          "scr\obj\dbt_mbr_protector.sys",
-          "scr\obj\dbt_mbr_protector.inf",
-          "scr\obj\dbt_mbr_protector.pdb",
-          "notifier\obj\dbt_notifier.exe"
+          "scr\obj_${{ matrix.arch }}\dbt_mbr_protector.sys",
+          "scr\obj_${{ matrix.arch }}\dbt_mbr_protector.inf"
         )
         
         foreach ($file in $files) {
           if (Test-Path $file) {
-            Copy-Item $file artifacts\
+            Copy-Item $file artifacts_${{ matrix.arch }}\
             Write-Host "Copied $file"
           } else {
             Write-Host "WARNING: $file not found"
           }
         }
         
+        # Копируем notifier только для x64 (универсальный)
+        if ("${{ matrix.arch }}" -eq "x64") {
+          Copy-Item notifier\obj\dbt_notifier.exe artifacts_${{ matrix.arch }}\
+          Write-Host "Copied notifier for x64"
+        }
+        
+        # Создаем установочные скрипты для каждой архитектуры
         $installBat = @"
         @echo off
-        title DBT MBR Protector Installer
-        echo ========================================
-        echo  DBT MBR Protector - Installation
-        echo ========================================
+        title DBT MBR Protector Installer (${{ matrix.arch }})
+        echo ============================================================
+        echo  DBT MBR Protector - Installation (${{ matrix.arch }})
+        echo ============================================================
         echo.
         
         net session >nul 2>&1
@@ -179,10 +219,21 @@ jobs:
           exit /b 1
         )
         
-        echo [1/5] Enabling test signing mode...
+        echo [1/6] Enabling test signing mode...
         bcdedit /set testsigning on >nul 2>&1
         
-        echo [2/5] Copying driver...
+        echo [2/6] Checking architecture...
+        if /i "%PROCESSOR_ARCHITECTURE%"=="AMD64" (
+          echo Detected: x64
+        ) else if /i "%PROCESSOR_ARCHITECTURE%"=="x86" (
+          echo Detected: x86
+        ) else if /i "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
+          echo Detected: ARM64
+        ) else (
+          echo WARNING: Unknown architecture!
+        )
+        
+        echo [3/6] Copying driver...
         copy /Y dbt_mbr_protector.sys C:\Windows\System32\drivers\
         if %errorLevel% neq 0 (
           echo ERROR: Failed to copy driver!
@@ -190,21 +241,25 @@ jobs:
           exit /b 1
         )
         
-        echo [3/5] Installing service...
+        echo [4/6] Installing service...
         sc create DbtMbrProtector binPath= "C:\Windows\System32\drivers\dbt_mbr_protector.sys" type= kernel start= boot
         
-        echo [4/5] Starting driver...
+        echo [5/6] Starting driver...
         sc start DbtMbrProtector
         
-        echo [5/5] Installing notifier...
-        mkdir "C:\Program Files\DBT" 2>nul
-        copy /Y dbt_notifier.exe "C:\Program Files\DBT\"
-        start "" "C:\Program Files\DBT\dbt_notifier.exe"
+        echo [6/6] Installing notifier...
+        if exist dbt_notifier.exe (
+          mkdir "C:\Program Files\DBT" 2>nul
+          copy /Y dbt_notifier.exe "C:\Program Files\DBT\"
+          start "" "C:\Program Files\DBT\dbt_notifier.exe"
+        ) else (
+          echo WARNING: Notifier not found for this architecture
+        )
         
         echo.
-        echo ========================================
-        echo  Installation complete!
-        echo ========================================
+        echo ============================================================
+        echo  Installation complete for ${{ matrix.arch }}!
+        echo ============================================================
         echo.
         echo  Please restart your computer for changes to take effect.
         echo.
@@ -212,14 +267,14 @@ jobs:
         echo.
         pause
         "@
-        $installBat | Out-File -FilePath artifacts\install.bat -Encoding ASCII
+        $installBat | Out-File -FilePath artifacts_${{ matrix.arch }}\install.bat -Encoding ASCII
         
         $uninstallBat = @"
         @echo off
         title DBT MBR Protector Uninstaller
-        echo ========================================
+        echo ============================================================
         echo  DBT MBR Protector - Uninstallation
-        echo ========================================
+        echo ============================================================
         echo.
         
         net session >nul 2>&1
@@ -244,23 +299,25 @@ jobs:
         rmdir /S /Q "C:\Program Files\DBT" 2>nul
         
         echo.
-        echo ========================================
+        echo ============================================================
         echo  Uninstallation complete!
-        echo ========================================
+        echo ============================================================
         echo.
         pause
         "@
-        $uninstallBat | Out-File -FilePath artifacts\uninstall.bat -Encoding ASCII
+        $uninstallBat | Out-File -FilePath artifacts_${{ matrix.arch }}\uninstall.bat -Encoding ASCII
         
         $readme = @"
         DBT MBR PROTECTOR - INSTALLATION GUIDE
-        ======================================
+        ============================================================
+        
+        ARCHITECTURE: ${{ matrix.arch }}
         
         FILES:
         ------
-        dbt_mbr_protector.sys  : Kernel-mode filter driver
+        dbt_mbr_protector.sys  : Kernel-mode filter driver (${{ matrix.arch }})
         dbt_mbr_protector.inf  : Driver installation file
-        dbt_notifier.exe       : User-mode notification service
+        dbt_notifier.exe       : User-mode notification service (x64 only)
         install.bat            : Automated installation script
         uninstall.bat          : Automated removal script
         
@@ -279,7 +336,7 @@ jobs:
         
         REQUIREMENTS:
         -------------
-        - Windows 7/8/10/11 (x64)
+        - Windows 7/8/10/11 (${{ matrix.arch }})
         - Administrator privileges
         - Test signing mode (enabled by installer)
         
@@ -287,34 +344,89 @@ jobs:
         ----------
         Run uninstall.bat as Administrator
         
+        FEATURES:
+        --------
+        - Protects MBR (sector 0) and GPT headers (sectors 1-9)
+        - Kernel-level blocking
+        - Process detection
+        - Bilingual interface (English/Russian)
+        - Event logging
+        
         NOTES:
         ------
-        - The driver protects MBR (sector 0) from any write attempts
         - All blocked attempts are logged to Windows event log
         - Notifier runs in background and shows alerts
         - Requires reboot after installation
         "@
-        $readme | Out-File -FilePath artifacts\README.txt -Encoding ASCII
+        $readme | Out-File -FilePath artifacts_${{ matrix.arch }}\README.txt -Encoding ASCII
         
-    - name: Upload Artifacts
+    - name: Upload Artifacts (${{ matrix.arch }})
       uses: actions/upload-artifact@v4
       with:
-        name: dbt-mbr-protector-suite
-        path: artifacts\*
+        name: dbt-mbr-protector-${{ matrix.arch }}
+        path: artifacts_${{ matrix.arch }}\*
         retention-days: 30
         
-    - name: Create Release Package
-      if: github.ref == 'refs/heads/main'
+  create_release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: all_artifacts
+        
+    - name: Create combined release package
       shell: pwsh
       run: |
         $version = Get-Date -Format "yyyy.MM.dd.HHmm"
-        $zipFile = "dbt-mbr-protector-$version.zip"
-        Compress-Archive -Path artifacts\* -DestinationPath $zipFile -Force
+        
+        # Создаем структуру для релиза
+        New-Item -ItemType Directory -Force -Path release_package
+        
+        # Копируем все артефакты
+        Get-ChildItem -Path all_artifacts -Directory | ForEach-Object {
+          $arch = $_.Name -replace 'dbt-mbr-protector-', ''
+          $dest = "release_package\$arch"
+          New-Item -ItemType Directory -Force -Path $dest
+          Copy-Item -Path "$($_.FullName)\*" -Destination $dest -Recurse -Force
+        }
+        
+        # Создаем общий README
+        $readme = @"
+        DBT MBR PROTECTOR - MULTI-ARCHITECTURE RELEASE
+        ============================================================
+        
+        RELEASE VERSION: $version
+        
+        This release contains drivers for all supported architectures:
+        - x64   : 64-bit Windows (most common)
+        - x86   : 32-bit Windows
+        - ARM64 : Windows on ARM
+        
+        Each architecture folder contains:
+        - dbt_mbr_protector.sys  : Kernel driver
+        - dbt_mbr_protector.inf  : Installation file
+        - install.bat            : Install script
+        - uninstall.bat          : Remove script
+        - README.txt             : Instructions
+        
+        Choose the folder matching your system architecture.
+        "@
+        $readme | Out-File -FilePath release_package\README.txt -Encoding ASCII
+        
+        # Создаем ZIP
+        $zipFile = "DBT_MBR_Protector_$version.zip"
+        Compress-Archive -Path release_package\* -DestinationPath $zipFile -Force
+        
         echo "ZIP_FILE=$zipFile" | Out-File -FilePath $env:GITHUB_ENV -Append
         
-    - name: Upload Release Package
-      if: github.ref == 'refs/heads/main'
+    - name: Upload combined package
       uses: actions/upload-artifact@v4
       with:
-        name: release-package
-        path: ${{ env.ZIP_FILE }}
+        name: dbt-mbr-protector-all-arch
+        path: DBT_MBR_Protector_*.zip
+        retention-days: 30
