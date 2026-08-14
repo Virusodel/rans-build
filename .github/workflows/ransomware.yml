@@ -17,11 +17,13 @@ jobs:
       with:
         vs-version: '17.0'
         
-    - name: Install Windows SDK
+    - name: Install Windows SDK and WDK
       shell: pwsh
       run: |
         choco install windows-sdk-10-version-2004-windbg -y
+        choco install wdk -y --version=10.0.19041.0
         
+        # Поиск WDK
         $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
         if ($ntddk) {
           $version = $ntddk.Directory.Parent.Name
@@ -32,23 +34,8 @@ jobs:
           exit 1
         }
         
-    - name: Verify Source Files
-      shell: pwsh
-      run: |
-        $files = @(
-          "scr\dbt_mbr_protector.c",
-          "scr\dbt_mbr_protector.inf",
-          "notifier\dbt_notifier.cpp"
-        )
-        
-        foreach ($file in $files) {
-          if (Test-Path $file) {
-            Write-Host "$file found"
-          } else {
-            Write-Host "$file MISSING"
-            exit 1
-          }
-        }
+        # Проверка наличия библиотек
+        Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" -Recurse -Filter "ntoskrnl.lib" | Select-Object FullName
         
     - name: Build x64 Driver
       shell: cmd
@@ -60,10 +47,12 @@ jobs:
         set "WDK_INC=C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%"
         set "WDK_LIB=C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%"
         
+        :: Компиляция
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
           /I"%WDK_INC%\km" ^
           /I"%WDK_INC%\shared" ^
           /I"%WDK_INC%\um" ^
+          /I"%WDK_INC%\ucrt" ^
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
           /DNTDDI_VERSION=0x06010000 ^
@@ -78,8 +67,11 @@ jobs:
           exit /b 1
         )
         
+        :: Линковка с правильными путями
         link /MACHINE:X64 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x64\dbt_mbr_protector.sys ^
-          /LIBPATH:"%WDK_LIB%\x64\km" ^
+          /LIBPATH:"%WDK_LIB%\km\x64" ^
+          /LIBPATH:"%WDK_LIB%\ucrt\x64" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\km\x64" ^
           artifacts\x64\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
@@ -105,6 +97,7 @@ jobs:
           /I"%WDK_INC%\km" ^
           /I"%WDK_INC%\shared" ^
           /I"%WDK_INC%\um" ^
+          /I"%WDK_INC%\ucrt" ^
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
           /DNTDDI_VERSION=0x06010000 ^
@@ -120,7 +113,9 @@ jobs:
         )
         
         link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x86\dbt_mbr_protector.sys ^
-          /LIBPATH:"%WDK_LIB%\x86\km" ^
+          /LIBPATH:"%WDK_LIB%\km\x86" ^
+          /LIBPATH:"%WDK_LIB%\ucrt\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\km\x86" ^
           artifacts\x86\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
@@ -146,6 +141,7 @@ jobs:
           /I"%WDK_INC%\km" ^
           /I"%WDK_INC%\shared" ^
           /I"%WDK_INC%\um" ^
+          /I"%WDK_INC%\ucrt" ^
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
           /DNTDDI_VERSION=0x06010000 ^
@@ -161,7 +157,9 @@ jobs:
         )
         
         link /MACHINE:ARM64 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\arm64\dbt_mbr_protector.sys ^
-          /LIBPATH:"%WDK_LIB%\arm64\km" ^
+          /LIBPATH:"%WDK_LIB%\km\arm64" ^
+          /LIBPATH:"%WDK_LIB%\ucrt\arm64" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\km\arm64" ^
           artifacts\arm64\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
@@ -173,7 +171,7 @@ jobs:
         copy scr\dbt_mbr_protector.inf artifacts\arm64\
         echo ARM64 Driver build complete!
         
-    - name: Build x64 Notifier
+    - name: Build Notifier (x64)
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
@@ -196,13 +194,13 @@ jobs:
         )
         
         link /MACHINE:X64 /OUT:artifacts\x64\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"%WDK_LIB%\x64\um" ^
+          /LIBPATH:"%WDK_LIB%\um\x64" ^
           artifacts\x64\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
         echo x64 Notifier build complete!
         
-    - name: Build x86 Notifier
+    - name: Build Notifier (x86)
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
@@ -225,13 +223,13 @@ jobs:
         )
         
         link /MACHINE:X86 /OUT:artifacts\x86\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"%WDK_LIB%\x86\um" ^
+          /LIBPATH:"%WDK_LIB%\um\x86" ^
           artifacts\x86\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
         echo x86 Notifier build complete!
         
-    - name: Build ARM64 Notifier
+    - name: Build Notifier (ARM64)
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=arm64
@@ -254,7 +252,7 @@ jobs:
         )
         
         link /MACHINE:ARM64 /OUT:artifacts\arm64\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"%WDK_LIB%\arm64\um" ^
+          /LIBPATH:"%WDK_LIB%\um\arm64" ^
           artifacts\arm64\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
