@@ -1,4 +1,4 @@
-name: Build with EWDK ISO
+name: Build with WDK (Chocolatey)
 
 on: workflow_dispatch
 
@@ -9,30 +9,33 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Download EWDK ISO
+    - name: Install WDK via Chocolatey
       shell: pwsh
       run: |
-        $url = "https://go.microsoft.com/fwlink/?linkid=2269817"
-        $isoPath = "$env:TEMP\ewdk.iso"
-        Invoke-WebRequest -Uri $url -OutFile $isoPath -UseBasicParsing
+        # Установка Chocolatey (если не установлен)
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        }
         
-        # Монтирование
-        $mount = Mount-DiskImage -ImagePath $isoPath -PassThru
-        $driveLetter = ($mount | Get-Volume).DriveLetter
+        # Установка WDK (альтернативный пакет)
+        choco install windows-sdk-10-version-2004-windbg -y
+        choco install windows-sdk-10-version-2004-build-19041 -y
         
-        # Копирование
-        Copy-Item -Path "$driveLetter`:\*" -Destination "C:\EWDK" -Recurse -Force
+        # Установка MSVC build tools
+        choco install visualstudio2022buildtools -y
+        choco install visualstudio2022-workload-vctools -y
         
-        Dismount-DiskImage -ImagePath $isoPath
+        echo "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64" >> $env:GITHUB_PATH
         
-        echo "C:\EWDK\bin" >> $env:GITHUB_PATH
-        
-    - name: Build
+    - name: Build with MSBuild
       shell: cmd
       run: |
-        call C:\EWDK\BuildEnv\setenv.bat /x64 /fre /build
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         cd src
-        build -cZ
+        cl /c /Zi /GS- /W4 /O2 /DNDEBUG dbt_mbr_protector.c /Fodbt_mbr_protector.obj /Foobj\
+        link /MACHINE:X64 /DRIVER /OUT:obj\dbt_mbr_protector.sys obj\dbt_mbr_protector.obj
         
     - uses: actions/upload-artifact@v4
       with:
