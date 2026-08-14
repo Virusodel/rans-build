@@ -9,29 +9,6 @@ jobs:
   build:
     runs-on: windows-2022
     
-    strategy:
-      matrix:
-        arch: [x64, x86, arm64]
-        include:
-          - arch: x64
-            msvc_arch: x64
-            wdk_arch: x64
-            machine: X64
-            def_arch: _AMD64_
-            win_bits: _WIN64
-          - arch: x86
-            msvc_arch: x86
-            wdk_arch: x86
-            machine: X86
-            def_arch: _X86_
-            win_bits: _WIN32
-          - arch: arm64
-            msvc_arch: arm64
-            wdk_arch: arm64
-            machine: ARM64
-            def_arch: _ARM64_
-            win_bits: _WIN64
-    
     steps:
     - uses: actions/checkout@v4
     
@@ -40,10 +17,14 @@ jobs:
       with:
         vs-version: '17.0'
         
-    - name: Install Windows SDK
+    - name: Install Windows SDK (once)
       shell: pwsh
       run: |
         choco install windows-sdk-10-version-2004-windbg -y
+        choco install wdk -y
+        
+        # Проверка наличия файлов
+        Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
         
         $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
         if ($ntddk) {
@@ -54,6 +35,10 @@ jobs:
           Write-Host "ntddk.h not found!"
           exit 1
         }
+        
+        # Проверка библиотек для всех архитектур
+        Write-Host "Checking libraries..."
+        Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" -Recurse -Filter "ntoskrnl.lib" | Select-Object FullName
         
     - name: Verify Source Files
       shell: pwsh
@@ -73,16 +58,17 @@ jobs:
           }
         }
         
-    - name: Build Kernel Driver (${{ matrix.arch }})
+    - name: Build x64 Driver + Notifier
       shell: cmd
       run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.msvc_arch }}
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         
-        mkdir artifacts\${{ matrix.arch }} 2>nul
+        mkdir artifacts\x64 2>nul
         
         set "WDK_INC=C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%"
         set "WDK_LIB=C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%"
         
+        :: Компиляция драйвера
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
           /I"%WDK_INC%\km" ^
           /I"%WDK_INC%\shared" ^
@@ -90,68 +76,189 @@ jobs:
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
           /DNTDDI_VERSION=0x06010000 ^
-          /D${{ matrix.def_arch }} ^
-          /D${{ matrix.win_bits }} ^
+          /D_AMD64_ ^
+          /D_WIN64 ^
           scr\dbt_mbr_protector.c ^
-          /Foartifacts\${{ matrix.arch }}\dbt_mbr_protector.obj
+          /Foartifacts\x64\dbt_mbr_protector.obj
         
-        if not exist artifacts\${{ matrix.arch }}\dbt_mbr_protector.obj (
-          echo ERROR: Compilation failed for ${{ matrix.arch }}!
+        if errorlevel 1 (
+          echo ERROR: x64 Driver compilation failed!
           exit /b 1
         )
         
-        link /MACHINE:${{ matrix.machine }} /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\${{ matrix.arch }}\dbt_mbr_protector.sys ^
-          /LIBPATH:"%WDK_LIB%\%wdk_arch%\km" ^
-          artifacts\${{ matrix.arch }}\dbt_mbr_protector.obj ^
+        link /MACHINE:X64 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x64\dbt_mbr_protector.sys ^
+          /LIBPATH:"%WDK_LIB%\km\x64" ^
+          artifacts\x64\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
-        if not exist artifacts\${{ matrix.arch }}\dbt_mbr_protector.sys (
-          echo ERROR: Linking failed for ${{ matrix.arch }}!
+        if errorlevel 1 (
+          echo ERROR: x64 Driver linking failed!
           exit /b 1
         )
         
-        copy scr\dbt_mbr_protector.inf artifacts\${{ matrix.arch }}\
-        echo Driver build complete for ${{ matrix.arch }}!
+        :: Компиляция notifier
+        cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
+          /I"%WDK_INC%\um" ^
+          /D_AMD64_ ^
+          /D_WIN64 ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          notifier\dbt_notifier.cpp ^
+          /Foartifacts\x64\dbt_notifier.obj
         
-    - name: Build Notifier (${{ matrix.arch }})
+        if errorlevel 1 (
+          echo ERROR: x64 Notifier compilation failed!
+          exit /b 1
+        )
+        
+        link /MACHINE:X64 /OUT:artifacts\x64\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
+          /LIBPATH:"%WDK_LIB%\um\x64" ^
+          artifacts\x64\dbt_notifier.obj ^
+          user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
+        
+        if errorlevel 1 (
+          echo ERROR: x64 Notifier linking failed!
+          exit /b 1
+        )
+        
+        copy scr\dbt_mbr_protector.inf artifacts\x64\
+        echo x64 build complete!
+        
+    - name: Build x86 Driver + Notifier
       shell: cmd
       run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.msvc_arch }}
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
+        
+        mkdir artifacts\x86 2>nul
         
         set "WDK_INC=C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%"
         set "WDK_LIB=C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%"
         
-        cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
+        :: Компиляция драйвера
+        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
+          /I"%WDK_INC%\km" ^
+          /I"%WDK_INC%\shared" ^
           /I"%WDK_INC%\um" ^
-          /D${{ matrix.def_arch }} ^
-          /D${{ matrix.win_bits }} ^
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
-          notifier\dbt_notifier.cpp ^
-          /Foartifacts\${{ matrix.arch }}\dbt_notifier.obj
+          /DNTDDI_VERSION=0x06010000 ^
+          /D_X86_ ^
+          /D_WIN32 ^
+          scr\dbt_mbr_protector.c ^
+          /Foartifacts\x86\dbt_mbr_protector.obj
         
-        if not exist artifacts\${{ matrix.arch }}\dbt_notifier.obj (
-          echo ERROR: Notifier compilation failed for ${{ matrix.arch }}!
+        if errorlevel 1 (
+          echo ERROR: x86 Driver compilation failed!
           exit /b 1
         )
         
-        link /MACHINE:${{ matrix.machine }} /OUT:artifacts\${{ matrix.arch }}\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"%WDK_LIB%\%wdk_arch%\um" ^
-          artifacts\${{ matrix.arch }}\dbt_notifier.obj ^
+        link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x86\dbt_mbr_protector.sys ^
+          /LIBPATH:"%WDK_LIB%\km\x86" ^
+          artifacts\x86\dbt_mbr_protector.obj ^
+          ntoskrnl.lib hal.lib
+        
+        if errorlevel 1 (
+          echo ERROR: x86 Driver linking failed!
+          exit /b 1
+        )
+        
+        :: Компиляция notifier
+        cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
+          /I"%WDK_INC%\um" ^
+          /D_X86_ ^
+          /D_WIN32 ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          notifier\dbt_notifier.cpp ^
+          /Foartifacts\x86\dbt_notifier.obj
+        
+        if errorlevel 1 (
+          echo ERROR: x86 Notifier compilation failed!
+          exit /b 1
+        )
+        
+        link /MACHINE:X86 /OUT:artifacts\x86\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
+          /LIBPATH:"%WDK_LIB%\um\x86" ^
+          artifacts\x86\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
-        echo Notifier build complete for ${{ matrix.arch }}!
+        if errorlevel 1 (
+          echo ERROR: x86 Notifier linking failed!
+          exit /b 1
+        )
         
-    - name: Sign Driver (${{ matrix.arch }})
+        copy scr\dbt_mbr_protector.inf artifacts\x86\
+        echo x86 build complete!
+        
+    - name: Build ARM64 Driver + Notifier
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=arm64
+        
+        mkdir artifacts\arm64 2>nul
+        
+        set "WDK_INC=C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%"
+        set "WDK_LIB=C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%"
+        
+        :: Компиляция драйвера
+        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
+          /I"%WDK_INC%\km" ^
+          /I"%WDK_INC%\shared" ^
+          /I"%WDK_INC%\um" ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          /DNTDDI_VERSION=0x06010000 ^
+          /D_ARM64_ ^
+          /D_WIN64 ^
+          scr\dbt_mbr_protector.c ^
+          /Foartifacts\arm64\dbt_mbr_protector.obj
+        
+        if errorlevel 1 (
+          echo ERROR: ARM64 Driver compilation failed!
+          exit /b 1
+        )
+        
+        link /MACHINE:ARM64 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\arm64\dbt_mbr_protector.sys ^
+          /LIBPATH:"%WDK_LIB%\km\arm64" ^
+          artifacts\arm64\dbt_mbr_protector.obj ^
+          ntoskrnl.lib hal.lib
+        
+        if errorlevel 1 (
+          echo ERROR: ARM64 Driver linking failed!
+          exit /b 1
+        )
+        
+        :: Компиляция notifier
+        cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
+          /I"%WDK_INC%\um" ^
+          /D_ARM64_ ^
+          /D_WIN64 ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          notifier\dbt_notifier.cpp ^
+          /Foartifacts\arm64\dbt_notifier.obj
+        
+        if errorlevel 1 (
+          echo ERROR: ARM64 Notifier compilation failed!
+          exit /b 1
+        )
+        
+        link /MACHINE:ARM64 /OUT:artifacts\arm64\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
+          /LIBPATH:"%WDK_LIB%\um\arm64" ^
+          artifacts\arm64\dbt_notifier.obj ^
+          user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
+        
+        if errorlevel 1 (
+          echo ERROR: ARM64 Notifier linking failed!
+          exit /b 1
+        )
+        
+        copy scr\dbt_mbr_protector.inf artifacts\arm64\
+        echo ARM64 build complete!
+        
+    - name: Sign All Drivers
       shell: pwsh
       run: |
-        $sysPath = "artifacts\${{ matrix.arch }}\dbt_mbr_protector.sys"
-        
-        if (-not (Test-Path $sysPath)) {
-          Write-Host "ERROR: Driver not found for signing!"
-          exit 1
-        }
-        
         $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DBT Test Root" `
           -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
           -TextExtension @("2.5.29.19={text}CA=true")
@@ -159,25 +266,29 @@ jobs:
         $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" | Select-Object -First 1
         
         if ($signtool) {
-          Write-Host "Signing driver for ${{ matrix.arch }}..."
-          & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com $sysPath
-          
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Driver signed successfully for ${{ matrix.arch }}!"
-          } else {
-            Write-Host "Signing failed with code $LASTEXITCODE"
+          $archs = @("x64", "x86", "arm64")
+          foreach ($arch in $archs) {
+            $sysPath = "artifacts\$arch\dbt_mbr_protector.sys"
+            if (Test-Path $sysPath) {
+              Write-Host "Signing driver for $arch..."
+              & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com $sysPath
+            } else {
+              Write-Host "WARNING: $sysPath not found!"
+            }
           }
         } else {
-          Write-Host "WARNING: signtool not found, driver will be unsigned"
+          Write-Host "WARNING: signtool not found, drivers will be unsigned"
         }
         
-    - name: Create Install Scripts (${{ matrix.arch }})
+    - name: Create Install Scripts
       shell: pwsh
       run: |
-        $arch = "${{ matrix.arch }}"
-        $dest = "artifacts\$arch"
+        $archs = @("x64", "x86", "arm64")
         
-        $installBat = @"
+        foreach ($arch in $archs) {
+          $dest = "artifacts\$arch"
+          
+          $installBat = @"
         @echo off
         title DBT MBR Protector Installer ($arch)
         echo ============================================================
@@ -230,9 +341,9 @@ jobs:
         echo.
         pause
         "@
-        $installBat | Out-File -FilePath "$dest\install.bat" -Encoding ASCII
-        
-        $uninstallBat = @"
+          $installBat | Out-File -FilePath "$dest\install.bat" -Encoding ASCII
+          
+          $uninstallBat = @"
         @echo off
         title DBT MBR Protector Uninstaller
         echo ============================================================
@@ -268,9 +379,9 @@ jobs:
         echo.
         pause
         "@
-        $uninstallBat | Out-File -FilePath "$dest\uninstall.bat" -Encoding ASCII
-        
-        $readme = @"
+          $uninstallBat | Out-File -FilePath "$dest\uninstall.bat" -Encoding ASCII
+          
+          $readme = @"
         DBT MBR PROTECTOR - INSTALLATION GUIDE
         ============================================================
         
@@ -314,9 +425,10 @@ jobs:
         ----------
         Run uninstall.bat as Administrator
         "@
-        $readme | Out-File -FilePath "$dest\README.txt" -Encoding ASCII
+          $readme | Out-File -FilePath "$dest\README.txt" -Encoding ASCII
+        }
         
-        Write-Host "Install scripts created for $arch"
+        Write-Host "Install scripts created for all architectures"
         
     - name: Upload Combined Artifacts
       uses: actions/upload-artifact@v4
