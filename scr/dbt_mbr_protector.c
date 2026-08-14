@@ -2,6 +2,7 @@
 #include <ntdddisk.h>
 #include <wdm.h>
 #include <ntstrsafe.h>
+#include <stdlib.h>  // для wcstoul
 
 #define DEVICE_NAME L"\\Device\\DbtMbrProtector"
 #define SYM_LINK_NAME L"\\DosDevices\\DbtMbrProtector"
@@ -20,14 +21,14 @@ typedef struct _FILTER_EXTENSION {
 ULONG64 g_GlobalAttempts = 0;
 KSPIN_LOCK g_GlobalLock;
 
+// Получение имени процесса (исправленная версия)
 NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size) {
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
-    PUNICODE_STRING pName = NULL;
     
     __try {
-        pName = (PUNICODE_STRING)PsGetProcessImageFileName(CurrentProcess);
-        if (pName && pName->Buffer) {
-            RtlStringCbPrintfA(ProcessName, Size, "%wZ", pName);
+        PCHAR pName = PsGetProcessImageFileName(CurrentProcess);
+        if (pName) {
+            RtlStringCbPrintfA(ProcessName, Size, "%s", pName);
             return STATUS_SUCCESS;
         }
     } __except(EXCEPTION_EXECUTE_HANDLER) {
@@ -103,7 +104,7 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
     NTSTATUS status;
     PDEVICE_OBJECT filterDevice = NULL;
     PFILTER_EXTENSION ext;
-    UNICODE_STRING deviceName, symLinkName;
+    UNICODE_STRING deviceName;
     WCHAR nameBuffer[64];
     
     RtlStringCchPrintfW(nameBuffer, 64, L"\\Device\\DbtMbrProtector_%lu", DeviceNumber);
@@ -133,7 +134,7 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
     return STATUS_SUCCESS;
 }
 
-// Получение номера диска из имени устройства
+// Получение номера диска из имени устройства (исправлено: _wtoi -> wcstoul)
 ULONG GetDiskNumber(PDEVICE_OBJECT DeviceObject) {
     // Парсим \Device\HarddiskVolumeX или \Device\HarddiskX\DRY
     WCHAR* name = DeviceObject->DriverObject->DriverName.Buffer;
@@ -143,7 +144,7 @@ ULONG GetDiskNumber(PDEVICE_OBJECT DeviceObject) {
         WCHAR* ptr = wcsstr(name, L"Harddisk");
         if (ptr) {
             ptr += 8; // Длина "Harddisk"
-            number = _wtoi(ptr);
+            number = wcstoul(ptr, NULL, 10);  // исправлено: _wtoi -> wcstoul
         }
     }
     return number;
@@ -264,7 +265,7 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     
     // Создание симлинка
     RtlInitUnicodeString(&symLinkName, SYM_LINK_NAME);
-    IoCreateSymbolicLink(&symLinkName, &symLinkName); // Используем тот же путь
+    IoCreateSymbolicLink(&symLinkName, &symLinkName);
     
     // Аттачимся ко всем дискам
     AttachToAllDisks(DriverObject);
