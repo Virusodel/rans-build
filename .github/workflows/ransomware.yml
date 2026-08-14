@@ -20,18 +20,15 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Setup Visual Studio environment
-      uses: microsoft/setup-msbuild@v1.1
+      uses: microsoft/setup-msbuild@v2  # Актуальная версия
       with:
         vs-version: '17.0'
         
     - name: Setup WDK
       shell: pwsh
       run: |
-        # Установка WDK через chocolatey
         choco install windows-sdk-10-version-2004-windbg -y
         choco install windows-driver-kit -y
-        
-        # Настройка переменных
         echo "WDKPATH=C:\Program Files (x86)\Windows Kits\10" >> $env:GITHUB_ENV
         
     - name: Build driver
@@ -39,19 +36,15 @@ jobs:
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         call "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\setenv.bat" /x64 /fre /build
-        
         cd src
         build -cZ
         
     - name: Sign driver (test certificate)
       shell: pwsh
       run: |
-        # Создание тестового сертификата
         $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DBT Test Root" `
           -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
           -TextExtension @("2.5.29.19={text}CA=true")
-        
-        # Подпись драйвера
         & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\signtool.exe" sign `
           /v /fd SHA256 /a /s My /n "DBT Test Root" `
           /t http://timestamp.digicert.com `
@@ -64,7 +57,7 @@ jobs:
         Copy-Item src\obj\*.sys src\obj\dbt_mbr_protector.sys -Force
         
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: dbt-mbr-protector
         path: |
@@ -83,7 +76,7 @@ jobs:
         
     - name: Upload release asset
       if: github.ref == 'refs/heads/main'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: release-package
         path: dbt-mbr-protector-*.zip
