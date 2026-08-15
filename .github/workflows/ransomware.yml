@@ -56,7 +56,7 @@ jobs:
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         
         rem Безопасная сборка через проект vcxproj для максимальной совместимости (Win 7 - Win 11)
-        msbuild dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10
+        msbuild dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10 /p:SignMode=Off
         
         rem Создаем структуру папок, которую ожидает остальная часть скрипта
         mkdir scr\obj 2>nul
