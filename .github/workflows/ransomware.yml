@@ -111,82 +111,6 @@ jobs:
         copy scr\dbt_mbr_protector.inf artifacts\x64\
         echo x64 build complete!
         
-    - name: Diagnose x86 WDK paths
-      shell: pwsh
-      run: |
-        $version = $env:WDK_VERSION
-        Write-Host "=== WDK Version: $version ==="
-        Write-Host ""
-        
-        $basePath = "C:\Program Files (x86)\Windows Kits\10\Lib\$version"
-        
-        Write-Host "=== Checking km folder ==="
-        $kmPath = "$basePath\km"
-        if (Test-Path $kmPath) {
-          Get-ChildItem $kmPath -Directory | ForEach-Object {
-            $lib = Get-ChildItem "$($_.FullName)\ntoskrnl.lib" -ErrorAction SilentlyContinue
-            if ($lib) {
-              Write-Host "  $($_.Name) - ntoskrnl.lib found"
-            } else {
-              Write-Host "  $($_.Name) - ntoskrnl.lib NOT found"
-            }
-          }
-        } else {
-          Write-Host "  km folder not found!"
-        }
-        
-        Write-Host ""
-        Write-Host "=== Checking um folder ==="
-        $umPath = "$basePath\um"
-        if (Test-Path $umPath) {
-          Get-ChildItem $umPath -Directory | ForEach-Object {
-            $lib = Get-ChildItem "$($_.FullName)\user32.lib" -ErrorAction SilentlyContinue
-            if ($lib) {
-              Write-Host " $($_.Name) - user32.lib found"
-            } else {
-              Write-Host "  $($_.Name) - user32.lib NOT found"
-            }
-          }
-        } else {
-          Write-Host "  um folder not found!"
-        }
-        
-        Write-Host ""
-        Write-Host "=== Full km directory structure ==="
-        if (Test-Path $kmPath) {
-          Get-ChildItem $kmPath -Directory | ForEach-Object {
-            Write-Host "  km\$($_.Name)"
-            Get-ChildItem $_.FullName -Filter "*.lib" -ErrorAction SilentlyContinue | ForEach-Object {
-              Write-Host "    $($_.Name)"
-            }
-          }
-        }
-        
-        Write-Host ""
-        Write-Host "=== Full um directory structure ==="
-        if (Test-Path $umPath) {
-          Get-ChildItem $umPath -Directory | ForEach-Object {
-            Write-Host "  um\$($_.Name)"
-            Get-ChildItem $_.FullName -Filter "*.lib" -ErrorAction SilentlyContinue | ForEach-Object {
-              Write-Host "    $($_.Name)"
-            }
-          }
-        }
-        
-        # Сохраняем найденные пути в переменные окружения
-        $kmFolder = Get-ChildItem $kmPath -Directory | Where-Object { Test-Path "$($_.FullName)\ntoskrnl.lib" } | Select-Object -First 1
-        if ($kmFolder) {
-          echo "X86_KM_FOLDER=$($kmFolder.Name)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          Write-Host ""
-          Write-Host "x86 km folder: $($kmFolder.Name)"
-        }
-        
-        $umFolder = Get-ChildItem $umPath -Directory | Where-Object { Test-Path "$($_.FullName)\user32.lib" } | Select-Object -First 1
-        if ($umFolder) {
-          echo "X86_UM_FOLDER=$($umFolder.Name)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          Write-Host "x86 um folder: $($umFolder.Name)"
-        }
-        
     - name: Build x86 Driver + Notifier
       shell: cmd
       run: |
@@ -203,6 +127,7 @@ jobs:
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
           /DNTDDI_VERSION=0x06010000 ^
+          /D_CRT_SECURE_NO_WARNINGS ^
           scr\dbt_mbr_protector.c ^
           /Foartifacts\x86\dbt_mbr_protector.obj
         
@@ -211,9 +136,9 @@ jobs:
           exit /b 1
         )
         
-        :: Используем найденные пути
+        :: Правильный путь для x86 — i386
         link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x86\dbt_mbr_protector.sys ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\%X86_KM_FOLDER%" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\i386" ^
           artifacts\x86\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
@@ -228,6 +153,7 @@ jobs:
           /D_WIN32 ^
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
+          /D_CRT_SECURE_NO_WARNINGS ^
           notifier\dbt_notifier.cpp ^
           /Foartifacts\x86\dbt_notifier.obj
         
@@ -237,7 +163,7 @@ jobs:
         )
         
         link /MACHINE:X86 /OUT:artifacts\x86\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\%X86_UM_FOLDER%" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386" ^
           artifacts\x86\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
