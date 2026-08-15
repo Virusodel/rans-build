@@ -76,8 +76,10 @@ jobs:
         
         link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:scr\obj\dbt_mbr_protector.sys ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
           scr\obj\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib
+          ntoskrnl.lib hal.lib wmilib.lib
         
         if not exist scr\obj\dbt_mbr_protector.sys (
           echo ERROR: x86 linking failed!
