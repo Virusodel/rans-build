@@ -17,19 +17,22 @@ jobs:
       with:
         vs-version: '17.0'
         
-    - name: Install Winget and WDK
+    - name: Install WDK via direct download (x86 compatible)
       shell: pwsh
       run: |
-        Write-Host "Installing winget..."
-        $wingetUrl = "https://github.com/microsoft/winget-cli/releases/download/v1.7.10941/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
-        $wingetInstaller = "$env:TEMP\winget.msixbundle"
-        Invoke-WebRequest -Uri $wingetUrl -OutFile $wingetInstaller -UseBasicParsing
-        Add-AppxPackage -Path $wingetInstaller
+        Write-Host "Downloading WDK 10.0.18362.0..."
+        $wdkUrl = "https://go.microsoft.com/fwlink/?linkid=2085767"
+        $wdkInstaller = "$env:TEMP\wdksetup.exe"
         
-        $env:Path += ";C:\Program Files\WindowsApps\Microsoft.DesktopAppInstaller_1.22.10941.0_x64__8wekyb3d8bbwe"
+        # Используем WebClient вместо Invoke-WebRequest для лучшей совместимости
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile($wdkUrl, $wdkInstaller)
         
-        Write-Host "Installing WDK 10.0.19041.0 via winget..."
-        winget install -e --id Microsoft.WindowsWDK.10.0.19041 --accept-package-agreements --accept-source-agreements
+        Write-Host "Installing WDK silently..."
+        Start-Process -FilePath $wdkInstaller -ArgumentList "/quiet /norestart /features +" -Wait
+        
+        Write-Host "Waiting for installation to complete..."
+        Start-Sleep -Seconds 30
         
         Write-Host "Checking WDK installation..."
         $kitPath = "C:\Program Files (x86)\Windows Kits\10"
@@ -47,8 +50,8 @@ jobs:
             Write-Host "Found WDK Version: $version"
             echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
           } else {
-            Write-Host "Using fallback version 10.0.19041.0"
-            echo "WDK_VERSION=10.0.19041.0" | Out-File -FilePath $env:GITHUB_ENV -Append
+            Write-Host "Using fallback version 10.0.18362.0"
+            echo "WDK_VERSION=10.0.18362.0" | Out-File -FilePath $env:GITHUB_ENV -Append
           }
         }
         
