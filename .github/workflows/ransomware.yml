@@ -41,16 +41,16 @@ jobs:
         if ($ntddk) {
           $version = ($ntddk.FullName -split "\\Include\\")[1] -split "\\" | Select-Object -First 1
           Write-Host "Found WDK Version: $version"
-          echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
         } else {
           $versions = Get-ChildItem "$kitPath\Include" -Directory | Where-Object { $_.Name -match "^\d+\.\d+\.\d+\.\d+$" }
           if ($versions) {
             $version = $versions[-1].Name
             Write-Host "Found WDK Version: $version"
-            echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           } else {
             Write-Host "Using fallback version 10.0.18362.0"
-            echo "WDK_VERSION=10.0.18362.0" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "WDK_VERSION=10.0.18362.0" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           }
         }
         
@@ -109,8 +109,13 @@ jobs:
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x64" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\ucrt\x64" ^
-          scr\obj\x64\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib wmilib.lib ntstrsafe.lib onecore.lib
+          /DEFAULTLIB:ntoskrnl.lib ^
+          /DEFAULTLIB:hal.lib ^
+          /DEFAULTLIB:wmilib.lib ^
+          /DEFAULTLIB:ntstrsafe.lib ^
+          /DEFAULTLIB:onecore.lib ^
+          /DEFAULTLIB:libcntpr.lib ^
+          scr\obj\x64\dbt_mbr_protector.obj
         
         if not exist scr\obj\x64\dbt_mbr_protector.sys (
           echo ERROR: x64 linking failed!
@@ -146,8 +151,13 @@ jobs:
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\ucrt\x86" ^
-          scr\obj\x86\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib wmilib.lib ntstrsafe.lib onecore.lib
+          /DEFAULTLIB:ntoskrnl.lib ^
+          /DEFAULTLIB:hal.lib ^
+          /DEFAULTLIB:wmilib.lib ^
+          /DEFAULTLIB:ntstrsafe.lib ^
+          /DEFAULTLIB:onecore.lib ^
+          /DEFAULTLIB:libcntpr.lib ^
+          scr\obj\x86\dbt_mbr_protector.obj
         
         if not exist scr\obj\x86\dbt_mbr_protector.sys (
           echo ERROR: x86 linking failed!
