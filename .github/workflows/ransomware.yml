@@ -1,378 +1,216 @@
-name: Build DBT MBR Protector Suite
+name: Find WDK Paths for x86
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 jobs:
-  build:
+  find-paths:
     runs-on: windows-2022
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Setup Visual Studio
-      uses: microsoft/setup-msbuild@v2
-      with:
-        vs-version: '17.0'
-        
-    - name: Install Windows SDK
+    - name: Find all WDK library paths
       shell: pwsh
       run: |
-        choco install windows-sdk-10-version-2004-windbg -y
+        $version = "10.0.26100.0"
+        $basePath = "C:\Program Files (x86)\Windows Kits\10\Lib\$version"
         
-        $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
-        if ($ntddk) {
-          $version = $ntddk.Directory.Parent.Name
-          Write-Host "Using WDK Version: $version"
-          echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+        Write-Host "========================================="
+        Write-Host "SEARCHING FOR WDK LIBRARIES (x86)"
+        Write-Host "========================================="
+        Write-Host ""
+        
+        Write-Host "1. Checking if base path exists:"
+        if (Test-Path $basePath) {
+          Write-Host "   $basePath EXISTS"
         } else {
-          Write-Host "ntddk.h not found!"
-          exit 1
-        }
-        
-    - name: Verify Source Files
-      shell: pwsh
-      run: |
-        $files = @(
-          "scr\dbt_mbr_protector.c",
-          "scr\dbt_mbr_protector.inf",
-          "notifier\dbt_notifier.cpp"
-        )
-        
-        foreach ($file in $files) {
-          if (Test-Path $file) {
-            Write-Host "$file found"
+          Write-Host "   $basePath NOT FOUND"
+          Write-Host "   Trying alternative paths..."
+          $basePath = "C:\Program Files (x86)\Windows Kits\10\Lib"
+          if (Test-Path $basePath) {
+            Write-Host "    Using: $basePath"
           } else {
-            Write-Host "$file MISSING"
+            Write-Host "   No WDK Lib folder found!"
             exit 1
           }
         }
+        Write-Host ""
         
-    - name: Build x64 Driver + Notifier
-      shell: cmd
-      run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+        Write-Host "2. Searching for ntoskrnl.lib:"
+        $found = Get-ChildItem -Path $basePath -Recurse -Filter "ntoskrnl.lib" -ErrorAction SilentlyContinue
+        if ($found) {
+          foreach ($f in $found) {
+            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
+            Write-Host "    $($f.FullName) ($size KB)"
+          }
+        } else {
+          Write-Host "   ntoskrnl.lib NOT FOUND ANYWHERE!"
+        }
+        Write-Host ""
         
-        mkdir artifacts\x64 2>nul
+        Write-Host "3. Searching for hal.lib:"
+        $found = Get-ChildItem -Path $basePath -Recurse -Filter "hal.lib" -ErrorAction SilentlyContinue
+        if ($found) {
+          foreach ($f in $found) {
+            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
+            Write-Host "   $($f.FullName) ($size KB)"
+          }
+        } else {
+          Write-Host "    hal.lib NOT FOUND ANYWHERE!"
+        }
+        Write-Host ""
         
-        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_AMD64_ ^
-          /D_WIN64 ^
-          /D_WIN32_WINNT=0x0601 ^
-          /DWINVER=0x0601 ^
-          /DNTDDI_VERSION=0x06010000 ^
-          /D_CRT_SECURE_NO_WARNINGS ^
-          scr\dbt_mbr_protector.c ^
-          /Foartifacts\x64\dbt_mbr_protector.obj
+        Write-Host "4. Searching for user32.lib:"
+        $found = Get-ChildItem -Path $basePath -Recurse -Filter "user32.lib" -ErrorAction SilentlyContinue
+        if ($found) {
+          foreach ($f in $found) {
+            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
+            Write-Host "   $($f.FullName) ($size KB)"
+          }
+        } else {
+          Write-Host "   user32.lib NOT FOUND ANYWHERE!"
+        }
+        Write-Host ""
         
-        if not exist artifacts\x64\dbt_mbr_protector.obj (
-          echo ERROR: x64 Driver compilation failed!
-          exit /b 1
-        )
+        Write-Host "5. Searching for kernel32.lib:"
+        $found = Get-ChildItem -Path $basePath -Recurse -Filter "kernel32.lib" -ErrorAction SilentlyContinue
+        if ($found) {
+          foreach ($f in $found) {
+            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
+            Write-Host "   $($f.FullName) ($size KB)"
+          }
+        } else {
+          Write-Host "    kernel32.lib NOT FOUND ANYWHERE!"
+        }
+        Write-Host ""
         
-        link /MACHINE:X64 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x64\dbt_mbr_protector.sys ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x64" ^
-          artifacts\x64\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib
+        Write-Host "6. Searching for psapi.lib:"
+        $found = Get-ChildItem -Path $basePath -Recurse -Filter "psapi.lib" -ErrorAction SilentlyContinue
+        if ($found) {
+          foreach ($f in $found) {
+            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
+            Write-Host "   $($f.FullName) ($size KB)"
+          }
+        } else {
+          Write-Host "    psapi.lib NOT FOUND ANYWHERE!"
+        }
+        Write-Host ""
         
-        if not exist artifacts\x64\dbt_mbr_protector.sys (
-          echo ERROR: x64 Driver linking failed!
-          exit /b 1
-        )
+        Write-Host "7. Searching for shlwapi.lib:"
+        $found = Get-ChildItem -Path $basePath -Recurse -Filter "shlwapi.lib" -ErrorAction SilentlyContinue
+        if ($found) {
+          foreach ($f in $found) {
+            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
+            Write-Host "    $($f.FullName) ($size KB)"
+          }
+        } else {
+          Write-Host "    shlwapi.lib NOT FOUND ANYWHERE!"
+        }
+        Write-Host ""
         
-        cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_AMD64_ ^
-          /D_WIN64 ^
-          /D_WIN32_WINNT=0x0601 ^
-          /DWINVER=0x0601 ^
-          /D_CRT_SECURE_NO_WARNINGS ^
-          notifier\dbt_notifier.cpp ^
-          /Foartifacts\x64\dbt_notifier.obj
+        Write-Host "8. Searching for advapi32.lib:"
+        $found = Get-ChildItem -Path $basePath -Recurse -Filter "advapi32.lib" -ErrorAction SilentlyContinue
+        if ($found) {
+          foreach ($f in $found) {
+            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
+            Write-Host "    $($f.FullName) ($size KB)"
+          }
+        } else {
+          Write-Host "    advapi32.lib NOT FOUND ANYWHERE!"
+        }
+        Write-Host ""
         
-        if not exist artifacts\x64\dbt_notifier.obj (
-          echo ERROR: x64 Notifier compilation failed!
-          exit /b 1
-        )
-        
-        link /MACHINE:X64 /OUT:artifacts\x64\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x64" ^
-          artifacts\x64\dbt_notifier.obj ^
-          user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
-        
-        if not exist artifacts\x64\dbt_notifier.exe (
-          echo ERROR: x64 Notifier linking failed!
-          exit /b 1
-        )
-        
-        copy scr\dbt_mbr_protector.inf artifacts\x64\
-        echo x64 build complete!
-        
-    - name: Build x86 Driver + Notifier
-      shell: cmd
-      run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
-        
-        mkdir artifacts\x86 2>nul
-        
-        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_X86_ ^
-          /D_WIN32 ^
-          /D_WIN32_WINNT=0x0601 ^
-          /DWINVER=0x0601 ^
-          /DNTDDI_VERSION=0x06010000 ^
-          /D_CRT_SECURE_NO_WARNINGS ^
-          scr\dbt_mbr_protector.c ^
-          /Foartifacts\x86\dbt_mbr_protector.obj
-        
-        if not exist artifacts\x86\dbt_mbr_protector.obj (
-          echo ERROR: x86 Driver compilation failed!
-          exit /b 1
-        )
-        
-        :: Прямой путь к библиотекам для x86
-        link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x86\dbt_mbr_protector.sys ^
-          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\i386\ntoskrnl.lib" ^
-          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\i386\hal.lib" ^
-          artifacts\x86\dbt_mbr_protector.obj
-        
-        if not exist artifacts\x86\dbt_mbr_protector.sys (
-          echo ERROR: x86 Driver linking failed!
-          exit /b 1
-        )
-        
-        cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_X86_ ^
-          /D_WIN32 ^
-          /D_WIN32_WINNT=0x0601 ^
-          /DWINVER=0x0601 ^
-          /D_CRT_SECURE_NO_WARNINGS ^
-          notifier\dbt_notifier.cpp ^
-          /Foartifacts\x86\dbt_notifier.obj
-        
-        if not exist artifacts\x86\dbt_notifier.obj (
-          echo ERROR: x86 Notifier compilation failed!
-          exit /b 1
-        )
-        
-        link /MACHINE:X86 /OUT:artifacts\x86\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\user32.lib" ^
-          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\kernel32.lib" ^
-          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\psapi.lib" ^
-          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\shlwapi.lib" ^
-          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\advapi32.lib" ^
-          artifacts\x86\dbt_notifier.obj
-        
-        if not exist artifacts\x86\dbt_notifier.exe (
-          echo ERROR: x86 Notifier linking failed!
-          exit /b 1
-        )
-        
-        copy scr\dbt_mbr_protector.inf artifacts\x86\
-        echo x86 build complete!
-        
-    - name: Sign All Drivers
-      shell: pwsh
-      run: |
-        $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DBT Test Root" `
-          -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
-          -TextExtension @("2.5.29.19={text}CA=true")
-        
-        $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" | Select-Object -First 1
-        
-        if ($signtool) {
-          $archs = @("x64", "x86")
-          foreach ($arch in $archs) {
-            $sysPath = "artifacts\$arch\dbt_mbr_protector.sys"
-            if (Test-Path $sysPath) {
-              Write-Host "Signing driver for $arch..."
-              & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com $sysPath
+        Write-Host "========================================="
+        Write-Host "FULL DIRECTORY STRUCTURE (km folder)"
+        Write-Host "========================================="
+        $kmPath = "$basePath\km"
+        if (Test-Path $kmPath) {
+          Get-ChildItem $kmPath -Directory | ForEach-Object {
+            Write-Host "km\$($_.Name)"
+            $libs = Get-ChildItem $_.FullName -Filter "*.lib" -ErrorAction SilentlyContinue
+            if ($libs) {
+              foreach ($lib in $libs) {
+                Write-Host "    $($lib.Name)"
+              }
             } else {
-              Write-Host "WARNING: $sysPath not found!"
+              Write-Host "    (empty)"
             }
           }
         } else {
-          Write-Host "WARNING: signtool not found, drivers will be unsigned"
+          Write-Host "km folder NOT FOUND!"
+        }
+        Write-Host ""
+        
+        Write-Host "========================================="
+        Write-Host "FULL DIRECTORY STRUCTURE (um folder)"
+        Write-Host "========================================="
+        $umPath = "$basePath\um"
+        if (Test-Path $umPath) {
+          Get-ChildItem $umPath -Directory | ForEach-Object {
+            Write-Host " um\$($_.Name)"
+            $libs = Get-ChildItem $_.FullName -Filter "*.lib" -ErrorAction SilentlyContinue
+            if ($libs) {
+              foreach ($lib in $libs) {
+                Write-Host "    $($lib.Name)"
+              }
+            } else {
+              Write-Host "    (empty)"
+            }
+          }
+        } else {
+          Write-Host " um folder NOT FOUND!"
+        }
+        Write-Host ""
+        
+        Write-Host "========================================="
+        Write-Host "RECOMMENDED PATHS FOR x86:"
+        Write-Host "========================================="
+        $ntoskrnl = Get-ChildItem -Path $basePath -Recurse -Filter "ntoskrnl.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
+        if ($ntoskrnl) {
+          Write-Host "ntoskrnl.lib: $($ntoskrnl.FullName)"
+        } else {
+          Write-Host "ntoskrnl.lib: NOT FOUND for x86!"
         }
         
-    - name: Create Install Scripts
-      shell: pwsh
-      run: |
-        $archs = @("x64", "x86")
-        
-        foreach ($arch in $archs) {
-          $dest = "artifacts\$arch"
-          
-          $installBat = @"
-        @echo off
-        title DBT MBR Protector Installer ($arch)
-        echo ============================================================
-        echo  DBT MBR Protector - Installation ($arch)
-        echo ============================================================
-        echo.
-        
-        net session >nul 2>&1
-        if %errorLevel% neq 0 (
-          echo ERROR: Administrator privileges required!
-          echo Please run as Administrator.
-          pause
-          exit /b 1
-        )
-        
-        echo [1/5] Enabling test signing mode...
-        bcdedit /set testsigning on >nul 2>&1
-        
-        echo [2/5] Copying driver...
-        copy /Y dbt_mbr_protector.sys C:\Windows\System32\drivers\
-        if %errorLevel% neq 0 (
-          echo ERROR: Failed to copy driver!
-          pause
-          exit /b 1
-        )
-        
-        echo [3/5] Installing service...
-        sc create DbtMbrProtector binPath= "C:\Windows\System32\drivers\dbt_mbr_protector.sys" type= kernel start= boot
-        
-        echo [4/5] Starting driver...
-        sc start DbtMbrProtector
-        
-        echo [5/5] Installing notifier...
-        if exist dbt_notifier.exe (
-          mkdir "C:\Program Files\DBT" 2>nul
-          copy /Y dbt_notifier.exe "C:\Program Files\DBT\"
-          start "" "C:\Program Files\DBT\dbt_notifier.exe"
-        ) else (
-          echo WARNING: Notifier not found, skipping
-        )
-        
-        echo.
-        echo ============================================================
-        echo  Installation complete for $arch!
-        echo ============================================================
-        echo.
-        echo  Please restart your computer for changes to take effect.
-        echo.
-        echo  To test: echo test > \\.\PhysicalDrive0
-        echo.
-        pause
-        "@
-          $installBat | Out-File -FilePath "$dest\install.bat" -Encoding ASCII
-          
-          $uninstallBat = @"
-        @echo off
-        title DBT MBR Protector Uninstaller
-        echo ============================================================
-        echo  DBT MBR Protector - Uninstallation
-        echo ============================================================
-        echo.
-        
-        net session >nul 2>&1
-        if %errorLevel% neq 0 (
-          echo ERROR: Administrator privileges required!
-          echo Please run as Administrator.
-          pause
-          exit /b 1
-        )
-        
-        echo [1/4] Stopping notifier...
-        taskkill /F /IM dbt_notifier.exe 2>nul
-        
-        echo [2/4] Stopping driver...
-        sc stop DbtMbrProtector 2>nul
-        
-        echo [3/4] Removing service...
-        sc delete DbtMbrProtector 2>nul
-        
-        echo [4/4] Deleting files...
-        del /F C:\Windows\System32\drivers\dbt_mbr_protector.sys 2>nul
-        rmdir /S /Q "C:\Program Files\DBT" 2>nul
-        
-        echo.
-        echo ============================================================
-        echo  Uninstallation complete!
-        echo ============================================================
-        echo.
-        pause
-        "@
-          $uninstallBat | Out-File -FilePath "$dest\uninstall.bat" -Encoding ASCII
-          
-          $readme = @"
-        DBT MBR PROTECTOR - INSTALLATION GUIDE
-        ============================================================
-        
-        ARCHITECTURE: $arch
-        
-        FILES:
-        ------
-        dbt_mbr_protector.sys  : Kernel-mode filter driver ($arch)
-        dbt_mbr_protector.inf  : Driver installation file
-        dbt_notifier.exe       : User-mode notification service ($arch)
-        install.bat            : Automated installation script
-        uninstall.bat          : Automated removal script
-        
-        INSTALLATION:
-        -------------
-        1. Run install.bat as Administrator
-        2. Restart the computer
-        3. The protection is now active
-        
-        TESTING:
-        --------
-        To verify the driver works:
-        - Run as Administrator: echo test > \\.\PhysicalDrive0
-        - You should see "Access denied"
-        - Notifier will show a warning message
-        
-        REQUIREMENTS:
-        -------------
-        - Windows 7/8/10/11 ($arch)
-        - Administrator privileges
-        - Test signing mode (enabled by installer)
-        
-        FEATURES:
-        --------
-        - Protects MBR (sector 0) and GPT headers (sectors 1-9)
-        - Kernel-level blocking
-        - Process detection
-        - Event logging
-        
-        UNINSTALL:
-        ----------
-        Run uninstall.bat as Administrator
-        "@
-          $readme | Out-File -FilePath "$dest\README.txt" -Encoding ASCII
+        $hal = Get-ChildItem -Path $basePath -Recurse -Filter "hal.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
+        if ($hal) {
+          Write-Host "hal.lib: $($hal.FullName)"
+        } else {
+          Write-Host "hal.lib: NOT FOUND for x86!"
         }
         
-        Write-Host "Install scripts created for all architectures"
+        $user32 = Get-ChildItem -Path $basePath -Recurse -Filter "user32.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
+        if ($user32) {
+          Write-Host "user32.lib: $($user32.FullName)"
+        } else {
+          Write-Host "user32.lib: NOT FOUND for x86!"
+        }
         
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: dbt-mbr-protector-suite
-        path: artifacts\*
-        retention-days: 30
+        $kernel32 = Get-ChildItem -Path $basePath -Recurse -Filter "kernel32.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
+        if ($kernel32) {
+          Write-Host "kernel32.lib: $($kernel32.FullName)"
+        } else {
+          Write-Host "kernel32.lib: NOT FOUND for x86!"
+        }
         
-    - name: Create Release Package
-      if: github.ref == 'refs/heads/main'
-      shell: pwsh
-      run: |
-        $version = Get-Date -Format "yyyy.MM.dd.HHmm"
-        $zipFile = "dbt-mbr-protector-$version.zip"
-        Compress-Archive -Path artifacts\* -DestinationPath $zipFile -Force
-        echo "ZIP_FILE=$zipFile" | Out-File -FilePath $env:GITHUB_ENV -Append
+        $psapi = Get-ChildItem -Path $basePath -Recurse -Filter "psapi.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
+        if ($psapi) {
+          Write-Host "psapi.lib: $($psapi.FullName)"
+        } else {
+          Write-Host "psapi.lib: NOT FOUND for x86!"
+        }
         
-    - name: Upload Release Package
-      if: github.ref == 'refs/heads/main'
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-package
-        path: ${{ env.ZIP_FILE }}
+        $shlwapi = Get-ChildItem -Path $basePath -Recurse -Filter "shlwapi.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
+        if ($shlwapi) {
+          Write-Host "shlwapi.lib: $($shlwapi.FullName)"
+        } else {
+          Write-Host "shlwapi.lib: NOT FOUND for x86!"
+        }
+        
+        $advapi32 = Get-ChildItem -Path $basePath -Recurse -Filter "advapi32.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
+        if ($advapi32) {
+          Write-Host "advapi32.lib: $($advapi32.FullName)"
+        } else {
+          Write-Host "advapi32.lib: NOT FOUND for x86!"
+        }
