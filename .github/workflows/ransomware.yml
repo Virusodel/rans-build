@@ -75,12 +75,15 @@ jobs:
           exit /b 1
         )
         
-        if exist "Release\dbt_mbr_protector\dbt_mbr_protector.sys" (
-          copy "Release\dbt_mbr_protector\dbt_mbr_protector.sys" "scr\obj\x86\"
-          copy "Release\dbt_mbr_protector\dbt_mbr_protector.pdb" "scr\obj\x86\"
+        if exist "Win32\Release\dbt_mbr_protector\dbt_mbr_protector.sys" (
+          copy "Win32\Release\dbt_mbr_protector\dbt_mbr_protector.sys" "scr\obj\x86\"
+          copy "Win32\Release\dbt_mbr_protector\dbt_mbr_protector.pdb" "scr\obj\x86\"
         ) else if exist "Win32\Release\dbt_mbr_protector.sys" (
           copy "Win32\Release\dbt_mbr_protector.sys" "scr\obj\x86\"
           copy "Win32\Release\dbt_mbr_protector.pdb" "scr\obj\x86\"
+        ) else if exist "Release\dbt_mbr_protector\dbt_mbr_protector.sys" (
+          copy "Release\dbt_mbr_protector\dbt_mbr_protector.sys" "scr\obj\x86\"
+          copy "Release\dbt_mbr_protector\dbt_mbr_protector.pdb" "scr\obj\x86\"
         ) else if exist "Release\dbt_mbr_protector.sys" (
           copy "Release\dbt_mbr_protector.sys" "scr\obj\x86\"
           copy "Release\dbt_mbr_protector.pdb" "scr\obj\x86\"
