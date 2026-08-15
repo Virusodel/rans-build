@@ -70,15 +70,13 @@ jobs:
         )
         echo Driver build complete!
         
-        - name: Build Notifier (Universal x86)
+    - name: Build Notifier (Universal x86)
       shell: cmd
       run: |
-        rem Переключаем сборочную среду Visual Studio на 32-битный компилятор (x86)
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
         
         mkdir notifier\obj 2>nul
         
-        rem Компилируем код с макросом _X86_ вместо 64-битного AMD64
         cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
           /D_X86_ ^
@@ -90,7 +88,6 @@ jobs:
           exit /b 1
         )
         
-        rem Линкуем исполняемый файл под 32-битную машину (MACHINE:X86) и подтягиваем x86 библиотеки
         link /MACHINE:X86 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
           notifier\obj\dbt_notifier.obj ^
@@ -245,7 +242,7 @@ jobs:
         ------
         dbt_mbr_protector.sys  : Kernel-mode filter driver
         dbt_mbr_protector.inf  : Driver installation file
-        dbt_notifier.exe       : User-mode notification service
+        dbt_notifier.exe       : User-mode notification service (Universal x86)
         install.bat            : Automated installation script
         uninstall.bat          : Automated removal script
         
