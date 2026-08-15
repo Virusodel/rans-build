@@ -55,29 +55,38 @@ jobs:
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
         
-        msbuild dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=Win32 /p:TargetVersion=Windows10 /p:SignMode=Off
-        
         mkdir scr\obj 2>nul
-        if exist "Release\dbt_mbr_protector\dbt_mbr_protector.sys" (
-          copy "Release\dbt_mbr_protector\dbt_mbr_protector.sys" scr\obj\
-          copy "Release\dbt_mbr_protector\dbt_mbr_protector.pdb" scr\obj\
-        ) else if exist "Win32\Release\dbt_mbr_protector.sys" (
-          copy "Win32\Release\dbt_mbr_protector.sys" scr\obj\
-          copy "Win32\Release\dbt_mbr_protector.pdb" scr\obj\
-        ) else if exist "Release\dbt_mbr_protector.sys" (
-          copy "Release\dbt_mbr_protector.sys" scr\obj\
-          copy "Release\dbt_mbr_protector.pdb" scr\obj\
-        ) else (
-          echo ERROR: x86 driver not found!
+        
+        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
+          /D_X86_ ^
+          /D_WIN32 ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          /DNTDDI_VERSION=0x06010000 ^
+          scr\dbt_mbr_protector.c ^
+          /Foscr\obj\dbt_mbr_protector.obj
+        
+        if not exist scr\obj\dbt_mbr_protector.obj (
+          echo ERROR: x86 compilation failed!
           exit /b 1
         )
-        copy scr\dbt_mbr_protector.inf scr\obj\
+        
+        link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:scr\obj\dbt_mbr_protector.sys ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
+          scr\obj\dbt_mbr_protector.obj ^
+          ntoskrnl.lib hal.lib
         
         if not exist scr\obj\dbt_mbr_protector.sys (
-          echo ERROR: MSBuild failed to create 32-bit driver!
+          echo ERROR: x86 linking failed!
           exit /b 1
         )
-        echo 32-bit Driver build complete!
+        
+        copy scr\dbt_mbr_protector.inf scr\obj\
+        
+        echo x86 Driver build complete!
         
     - name: Build Notifier (Universal x86)
       shell: cmd
