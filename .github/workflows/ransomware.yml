@@ -137,6 +137,7 @@ jobs:
         
         link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x86\dbt_mbr_protector.sys ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\i386" ^
           artifacts\x86\dbt_mbr_protector.obj ^
           ntoskrnl.lib hal.lib
         
@@ -161,6 +162,7 @@ jobs:
         
         link /MACHINE:X86 /OUT:artifacts\x86\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386" ^
           artifacts\x86\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
