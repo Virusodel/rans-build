@@ -2,15 +2,13 @@
 #include <ntdddisk.h>
 #include <wdm.h>
 #include <stdlib.h>
-#include <ntstrsafe.h>
 
 #define DEVICE_NAME L"\\Device\\DbtMbrProtector"
 #define SYM_LINK_NAME L"\\DosDevices\\DbtMbrProtector"
 #define SECTOR_SIZE 512
 #define MAX_PROCESS_NAME 256
 #define MAX_DRIVE_COUNT 64
-#define PROTECTED_SECTOR_COUNT 10           // Защита секторов 0-9
-#define PROTECTED_SECTOR_END 9
+#define PROTECTED_SECTOR_COUNT 10
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
@@ -26,17 +24,16 @@ typedef struct _FILTER_EXTENSION {
 ULONG64 g_GlobalAttempts = 0;
 KSPIN_LOCK g_GlobalLock;
 BOOLEAN g_EnableLogging = TRUE;
-ULONG g_ProtectedSectors = PROTECTED_SECTOR_COUNT;
 
-// Список подозрительных процессов (можно расширять)
-const WCHAR* SuspiciousProcesses[] = {
-    L"petya", L"goldeneye", L"misha", L"satana",
-    L"annabelle", L"gdi", L"ransom", L"wannacry",
-    L"locky", L"cryptolocker", L"badrabbit"
+// Список подозрительных процессов
+const char* SuspiciousProcesses[] = {
+    "petya", "goldeneye", "misha", "satana",
+    "annabelle", "gdi", "ransom", "wannacry",
+    "locky", "cryptolocker", "badrabbit"
 };
 #define SUSPICIOUS_COUNT (sizeof(SuspiciousProcesses) / sizeof(SuspiciousProcesses[0]))
 
-// Получение имени процесса
+// Получение имени процесса (БЕЗ RtlStringCbPrintfA)
 NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
     ULONG pid = (ULONG)PsGetCurrentProcessId();
@@ -46,15 +43,16 @@ NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     __try {
         PCHAR pName = PsGetProcessImageFileName(CurrentProcess);
         if (pName) {
-            RtlStringCbPrintfA(ProcessName, Size, "%s", pName);
+            // Используем sprintf (работает без дополнительных библиотек)
+            sprintf(ProcessName, "%s", pName);
             return STATUS_SUCCESS;
         }
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        RtlStringCbPrintfA(ProcessName, Size, "UNKNOWN");
+        sprintf(ProcessName, "UNKNOWN");
         return STATUS_UNSUCCESSFUL;
     }
     
-    RtlStringCbPrintfA(ProcessName, Size, "UNKNOWN");
+    sprintf(ProcessName, "UNKNOWN");
     return STATUS_SUCCESS;
 }
 
@@ -63,7 +61,7 @@ BOOLEAN IsSuspiciousProcess(PCHAR ProcessName) {
     if (!ProcessName) return FALSE;
     
     for (ULONG i = 0; i < SUSPICIOUS_COUNT; i++) {
-        if (wcsstr((WCHAR*)ProcessName, SuspiciousProcesses[i])) {
+        if (strstr(ProcessName, SuspiciousProcesses[i])) {
             return TRUE;
         }
     }
@@ -72,26 +70,20 @@ BOOLEAN IsSuspiciousProcess(PCHAR ProcessName) {
 
 // Расширенная проверка защиты сектора
 BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
-    // 1. Защита MBR (сектор 0)
+    // Защита сектора 0 (MBR)
     if (ByteOffset == 0 && Length >= SECTOR_SIZE) {
         return TRUE;
     }
     
-    // 2. Защита GPT заголовков (секторы 1-9)
+    // Защита секторов 1-9 (GPT Header, Backup MBR)
     for (ULONG i = 1; i < PROTECTED_SECTOR_COUNT; i++) {
         if (ByteOffset == (ULONGLONG)i * SECTOR_SIZE) {
             return TRUE;
         }
     }
     
-    // 3. Защита от частичной перезаписи первых 10 секторов
+    // Защита от частичной перезаписи первых 10 секторов
     if (ByteOffset < (ULONGLONG)PROTECTED_SECTOR_COUNT * SECTOR_SIZE && 
-        ByteOffset + Length > (ULONGLONG)PROTECTED_SECTOR_COUNT * SECTOR_SIZE) {
-        return TRUE;
-    }
-    
-    // 4. Защита от записи в большие блоки, перекрывающие защищённую зону
-    if (ByteOffset < (ULONGLONG)PROTECTED_SECTOR_COUNT * SECTOR_SIZE &&
         ByteOffset + Length > (ULONGLONG)PROTECTED_SECTOR_COUNT * SECTOR_SIZE) {
         return TRUE;
     }
@@ -99,21 +91,19 @@ BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
     return FALSE;
 }
 
-// Обработчик IRP_MJ_WRITE (улучшен)
+// Обработчик IRP_MJ_WRITE
 NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PFILTER_EXTENSION ext = (PFILTER_EXTENSION)DeviceObject->DeviceExtension;
     PIO_STACK_LOCATION irpSp = IoGetCurrentIrpStackLocation(Irp);
     ULONGLONG byteOffset = irpSp->Parameters.Write.ByteOffset.QuadPart;
     ULONG length = irpSp->Parameters.Write.Length;
     
-    // Проверяем, не пишут ли в защищённую область
     if (IsProtectedSector(byteOffset, length)) {
         CHAR processName[MAX_PROCESS_NAME];
         ULONG pid = 0;
         
         GetProcessName(processName, sizeof(processName), &pid);
         
-        // Атомарное обновление счётчика
         KIRQL oldIrql;
         KeAcquireSpinLock(&g_GlobalLock, &oldIrql);
         g_GlobalAttempts++;
@@ -121,16 +111,6 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         ULONG64 attemptNumber = g_GlobalAttempts;
         KeReleaseSpinLock(&g_GlobalLock, oldIrql);
         
-        // Дополнительная проверка на подозрительный процесс
-        if (IsSuspiciousProcess(processName)) {
-            DbgPrint(
-                "[DBT] ⚠️ SUSPICIOUS PROCESS DETECTED: %s (PID: %lu)\n"
-                "  Attempted to write to MBR/GPT area on PhysicalDrive%lu\n",
-                processName, pid, ext->DeviceNumber
-            );
-        }
-        
-        // Логирование
         if (g_EnableLogging) {
             DbgPrint(
                 "[DBT] BLOCKED MBR WRITE #%llu\n"
@@ -141,21 +121,21 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
                 attemptNumber, ext->DeviceNumber, processName, pid, byteOffset, length
             );
             
-            WCHAR msgBuffer[512];
-            swprintf(msgBuffer, 512, 
-                L"[DBT] Process %S (PID %lu) attempted to write to sector on PhysicalDrive%lu. Blocked.",
-                processName, pid, ext->DeviceNumber);
-            DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "%S\n", msgBuffer);
+            // Проверка на подозрительный процесс
+            if (IsSuspiciousProcess(processName)) {
+                DbgPrint(
+                    "[DBT] ⚠️ SUSPICIOUS PROCESS: %s (PID: %lu)\n",
+                    processName, pid
+                );
+            }
         }
         
-        // Блокируем запись
         Irp->IoStatus.Status = STATUS_ACCESS_DENIED;
         Irp->IoStatus.Information = 0;
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
         return STATUS_ACCESS_DENIED;
     }
     
-    // Пропускаем запрос
     IoSkipCurrentIrpStackLocation(Irp);
     return IoCallDriver(ext->AttachedToDevice, Irp);
 }
@@ -228,7 +208,6 @@ NTSTATUS AttachToAllDisks(PDRIVER_OBJECT DriverObject) {
     ULONG i;
     
     for (i = 0; i < MAX_DRIVE_COUNT; i++) {
-        // Физические диски
         swprintf(buffer, 64, L"\\Device\\Harddisk%lu\\DR0", i);
         RtlInitUnicodeString(&deviceName, buffer);
         
@@ -239,7 +218,6 @@ NTSTATUS AttachToAllDisks(PDRIVER_OBJECT DriverObject) {
             ObDereferenceObject(fileObject);
         }
         
-        // Тома
         swprintf(buffer, 64, L"\\Device\\HarddiskVolume%lu", i);
         RtlInitUnicodeString(&deviceName, buffer);
         
