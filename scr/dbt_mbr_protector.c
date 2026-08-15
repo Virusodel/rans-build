@@ -25,7 +25,6 @@ ULONG64 g_GlobalAttempts = 0;
 KSPIN_LOCK g_GlobalLock;
 BOOLEAN g_EnableLogging = TRUE;
 
-// Список подозрительных процессов
 const char* SuspiciousProcesses[] = {
     "petya", "goldeneye", "misha", "satana",
     "annabelle", "gdi", "ransom", "wannacry",
@@ -33,7 +32,6 @@ const char* SuspiciousProcesses[] = {
 };
 #define SUSPICIOUS_COUNT (sizeof(SuspiciousProcesses) / sizeof(SuspiciousProcesses[0]))
 
-// Получение имени процесса (БЕЗ RtlStringCbPrintfA)
 NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
     ULONG pid = (ULONG)PsGetCurrentProcessId();
@@ -43,7 +41,6 @@ NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     __try {
         PCHAR pName = PsGetProcessImageFileName(CurrentProcess);
         if (pName) {
-            // Используем sprintf (работает без дополнительных библиотек)
             sprintf(ProcessName, "%s", pName);
             return STATUS_SUCCESS;
         }
@@ -56,7 +53,6 @@ NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     return STATUS_SUCCESS;
 }
 
-// Проверка на подозрительный процесс
 BOOLEAN IsSuspiciousProcess(PCHAR ProcessName) {
     if (!ProcessName) return FALSE;
     
@@ -68,21 +64,17 @@ BOOLEAN IsSuspiciousProcess(PCHAR ProcessName) {
     return FALSE;
 }
 
-// Расширенная проверка защиты сектора
 BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
-    // Защита сектора 0 (MBR)
     if (ByteOffset == 0 && Length >= SECTOR_SIZE) {
         return TRUE;
     }
     
-    // Защита секторов 1-9 (GPT Header, Backup MBR)
     for (ULONG i = 1; i < PROTECTED_SECTOR_COUNT; i++) {
         if (ByteOffset == (ULONGLONG)i * SECTOR_SIZE) {
             return TRUE;
         }
     }
     
-    // Защита от частичной перезаписи первых 10 секторов
     if (ByteOffset < (ULONGLONG)PROTECTED_SECTOR_COUNT * SECTOR_SIZE && 
         ByteOffset + Length > (ULONGLONG)PROTECTED_SECTOR_COUNT * SECTOR_SIZE) {
         return TRUE;
@@ -91,7 +83,6 @@ BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
     return FALSE;
 }
 
-// Обработчик IRP_MJ_WRITE
 NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PFILTER_EXTENSION ext = (PFILTER_EXTENSION)DeviceObject->DeviceExtension;
     PIO_STACK_LOCATION irpSp = IoGetCurrentIrpStackLocation(Irp);
@@ -121,10 +112,9 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
                 attemptNumber, ext->DeviceNumber, processName, pid, byteOffset, length
             );
             
-            // Проверка на подозрительный процесс
             if (IsSuspiciousProcess(processName)) {
                 DbgPrint(
-                    "[DBT] ⚠️ SUSPICIOUS PROCESS: %s (PID: %lu)\n",
+                    "[DBT] SUSPICIOUS PROCESS: %s (PID: %lu)\n",
                     processName, pid
                 );
             }
@@ -140,14 +130,12 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     return IoCallDriver(ext->AttachedToDevice, Irp);
 }
 
-// Pass-through для всех других IRP
 NTSTATUS DispatchPassThrough(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     IoSkipCurrentIrpStackLocation(Irp);
     PFILTER_EXTENSION ext = (PFILTER_EXTENSION)DeviceObject->DeviceExtension;
     return IoCallDriver(ext->AttachedToDevice, Irp);
 }
 
-// Создание фильтра для устройства
 NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDevice, ULONG DeviceNumber) {
     NTSTATUS status;
     PDEVICE_OBJECT filterDevice = NULL;
@@ -183,7 +171,6 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
     return STATUS_SUCCESS;
 }
 
-// Получение номера диска
 ULONG GetDiskNumber(PDEVICE_OBJECT DeviceObject) {
     WCHAR* name = DeviceObject->DriverObject->DriverName.Buffer;
     ULONG number = 0xFFFFFFFF;
@@ -198,7 +185,6 @@ ULONG GetDiskNumber(PDEVICE_OBJECT DeviceObject) {
     return number;
 }
 
-// Обход всех дисковых устройств
 NTSTATUS AttachToAllDisks(PDRIVER_OBJECT DriverObject) {
     NTSTATUS status;
     UNICODE_STRING deviceName;
@@ -234,7 +220,6 @@ NTSTATUS AttachToAllDisks(PDRIVER_OBJECT DriverObject) {
     return STATUS_SUCCESS;
 }
 
-// IOCTL для получения статистики
 NTSTATUS DispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PIO_STACK_LOCATION irpSp = IoGetCurrentIrpStackLocation(Irp);
     ULONG code = irpSp->Parameters.DeviceIoControl.IoControlCode;
@@ -264,7 +249,6 @@ NTSTATUS DispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     return status;
 }
 
-// Выгрузка драйвера
 VOID DriverUnload(PDRIVER_OBJECT DriverObject) {
     PDEVICE_OBJECT device = DriverObject->DeviceObject;
     UNICODE_STRING symLinkName;
@@ -285,7 +269,6 @@ VOID DriverUnload(PDRIVER_OBJECT DriverObject) {
     DbgPrint("[DBT] Driver unloaded. Total blocked: %llu\n", g_GlobalAttempts);
 }
 
-// Entry point
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
     ULONG i;
     UNICODE_STRING symLinkName;
