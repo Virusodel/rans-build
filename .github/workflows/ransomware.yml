@@ -24,7 +24,6 @@ jobs:
         $wdkUrl = "https://go.microsoft.com/fwlink/?linkid=2085767"
         $wdkInstaller = "$env:TEMP\wdksetup.exe"
         
-        # Используем WebClient вместо Invoke-WebRequest для лучшей совместимости
         $webClient = New-Object System.Net.WebClient
         $webClient.DownloadFile($wdkUrl, $wdkInstaller)
         
@@ -109,8 +108,9 @@ jobs:
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x64" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x64" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\ucrt\x64" ^
           scr\obj\x64\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib wmilib.lib
+          ntoskrnl.lib hal.lib wmilib.lib ntstrsafe.lib onecore.lib
         
         if not exist scr\obj\x64\dbt_mbr_protector.sys (
           echo ERROR: x64 linking failed!
@@ -145,8 +145,9 @@ jobs:
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\ucrt\x86" ^
           scr\obj\x86\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib wmilib.lib
+          ntoskrnl.lib hal.lib wmilib.lib ntstrsafe.lib onecore.lib
         
         if not exist scr\obj\x86\dbt_mbr_protector.sys (
           echo ERROR: x86 linking failed!
@@ -177,6 +178,7 @@ jobs:
         
         link /MACHINE:X86 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\ucrt\x86" ^
           notifier\obj\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
