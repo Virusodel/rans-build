@@ -16,7 +16,6 @@
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-// Языковые ресурсы
 struct LanguageStrings {
     const wchar_t* Title;
     const wchar_t* ErrorMsg;
@@ -66,9 +65,9 @@ LanguageStrings GetStrings(int lang) {
 int GetSystemLanguage() {
     LANGID lang = GetUserDefaultUILanguage();
     if (lang == 0x0419 || lang == 0x041A || lang == 0x0422 || lang == 0x0822) {
-        return 1; // Russian
+        return 1;
     }
-    return 0; // English
+    return 0;
 }
 
 std::wstring GetProcessNameFromId(DWORD pid) {
@@ -177,11 +176,9 @@ DWORD WINAPI MonitorThread(LPVOID param) {
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    // Определение языка
     int lang = GetSystemLanguage();
     LanguageStrings str = GetStrings(lang);
     
-    // Проверка прав администратора
     BOOL isAdmin = FALSE;
     PSID adminGroup = NULL;
     SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
@@ -201,7 +198,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     MessageBoxW(NULL, str.StartMsg, L"DBT Monitor", MB_OK | MB_ICONINFORMATION);
     
-    // Запуск мониторинга
     HANDLE hThread = CreateThread(NULL, 0, MonitorThread, &lang, 0, NULL);
     if (hThread) {
         WaitForSingleObject(hThread, INFINITE);
