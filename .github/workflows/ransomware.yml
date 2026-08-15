@@ -253,93 +253,47 @@ jobs:
         $uninstallBat | Out-File -FilePath artifacts\uninstall.bat -Encoding ASCII
         
         $readme = @"
-DBT MBR PROTECTOR - INSTALLATION GUIDE
-======================================
-
-ENGLISH / АНГЛИЙСКИЙ
---------------------
-FILES:
-------
-dbt_mbr_protector.sys  : Kernel-mode filter driver
-dbt_mbr_protector.inf  : Driver installation file
-dbt_notifier.exe       : User-mode notification service
-install.bat            : Automated installation script
-uninstall.bat          : Automated removal script
-
-INSTALLATION:
--------------
-1. Run install.bat as Administrator
-2. Restart the computer
-3. The protection is now active
-
-TESTING:
---------
-To verify the driver works:
-- Run as Administrator: echo test > \\.\PhysicalDrive0
-- You should see "Access denied"
-- Notifier will show a warning message
-
-REQUIREMENTS:
--------------
-- Windows 7/8/10/11 (x64 ONLY)
-- 32-bit (x86) systems are NOT supported
-- Administrator privileges
-- Test signing mode (enabled by installer)
-
-UNINSTALL:
-----------
-Run uninstall.bat as Administrator
-
-FEATURES:
----------
-- Protects MBR (sector 0) and GPT headers (sectors 1-9)
-- Kernel-level blocking
-- Process detection
-- Event logging
-- Ransomware process detection
-
-RUSSIAN / РУССКИЙ
------------------
-ФАЙЛЫ:
-------
-dbt_mbr_protector.sys  : Драйвер режима ядра
-dbt_mbr_protector.inf  : Установочный файл драйвера
-dbt_notifier.exe       : Служба уведомлений пользовательского режима
-install.bat            : Автоматический скрипт установки
-uninstall.bat          : Автоматический скрипт удаления
-
-УСТАНОВКА:
-----------
-1. Запустите install.bat от имени администратора
-2. Перезагрузите компьютер
-3. Защита активна
-
-ПРОВЕРКА:
----------
-Чтобы проверить работу драйвера:
-- Запустите от имени администратора: echo test > \\.\PhysicalDrive0
-- Должна появиться ошибка "Access denied"
-- Notifier покажет предупреждение
-
-ТРЕБОВАНИЯ:
------------
-- Windows 7/8/10/11 (только x64)
-- 32-битные (x86) системы НЕ ПОДДЕРЖИВАЮТСЯ
-- Права администратора
-- Режим тестовой подписи (включается установщиком)
-
-УДАЛЕНИЕ:
----------
-Запустите uninstall.bat от имени администратора
-
-ВОЗМОЖНОСТИ:
-------------
-- Защищает MBR (сектор 0) и GPT заголовки (секторы 1-9)
-- Блокировка на уровне ядра
-- Определение процесса
-- Логирование событий
-- Обнаружение процессов вымогателей
-"@
+        DBT MBR PROTECTOR - INSTALLATION GUIDE
+        ======================================
+        
+        FILES:
+        ------
+        dbt_mbr_protector.sys  : Kernel-mode filter driver
+        dbt_mbr_protector.inf  : Driver installation file
+        dbt_notifier.exe       : User-mode notification service
+        install.bat            : Automated installation script
+        uninstall.bat          : Automated removal script
+        
+        INSTALLATION:
+        -------------
+        1. Run install.bat as Administrator
+        2. Restart the computer
+        3. The protection is now active
+        
+        TESTING:
+        --------
+        To verify the driver works:
+        - Run as Administrator: echo test > \\.\PhysicalDrive0
+        - You should see "Access denied"
+        - Notifier will show a warning message
+        
+        REQUIREMENTS:
+        -------------
+        - Windows 7/8/10/11 (x64)
+        - Administrator privileges
+        - Test signing mode (enabled by installer)
+        
+        UNINSTALL:
+        ----------
+        Run uninstall.bat as Administrator
+        
+        NOTES:
+        ------
+        - The driver protects MBR (sector 0) from any write attempts
+        - All blocked attempts are logged to Windows event log
+        - Notifier runs in background and shows alerts
+        - Requires reboot after installation
+        "@
         $readme | Out-File -FilePath artifacts\README.txt -Encoding ASCII
         
     - name: Upload Artifacts
