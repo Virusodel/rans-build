@@ -17,9 +17,17 @@ jobs:
       with:
         vs-version: '17.0'
         
-    - name: Install Legacy WDK via winget
+    - name: Install Winget and WDK
       shell: pwsh
       run: |
+        Write-Host "Installing winget..."
+        $wingetUrl = "https://github.com/microsoft/winget-cli/releases/download/v1.7.10941/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+        $wingetInstaller = "$env:TEMP\winget.msixbundle"
+        Invoke-WebRequest -Uri $wingetUrl -OutFile $wingetInstaller -UseBasicParsing
+        Add-AppxPackage -Path $wingetInstaller
+        
+        $env:Path += ";C:\Program Files\WindowsApps\Microsoft.DesktopAppInstaller_1.22.10941.0_x64__8wekyb3d8bbwe"
+        
         Write-Host "Installing WDK 10.0.19041.0 via winget..."
         winget install -e --id Microsoft.WindowsWDK.10.0.19041 --accept-package-agreements --accept-source-agreements
         
@@ -64,60 +72,17 @@ jobs:
           }
         }
         
-    - name: Build Kernel Driver (x86)
-      shell: cmd
-      run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
-        
-        mkdir scr\obj 2>nul
-        
-        echo Using WDK_VERSION: %WDK_VERSION%
-        
-        echo Checking x86 libraries...
-        dir "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86\*.lib" 2>nul
-        
-        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_X86_ ^
-          /D_WIN32 ^
-          /D_WIN32_WINNT=0x0601 ^
-          /DWINVER=0x0601 ^
-          /DNTDDI_VERSION=0x06010000 ^
-          /D_DISABLE_DEPRECATE_STRING_SDK_WARNINGS ^
-          /GS- ^
-          scr\dbt_mbr_protector.c ^
-          /Foscr\obj\dbt_mbr_protector.obj
-        
-        if not exist scr\obj\dbt_mbr_protector.obj (
-          echo ERROR: x86 compilation failed!
-          exit /b 1
-        )
-        
-        link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:scr\obj\dbt_mbr_protector.sys ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
-          scr\obj\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib wmilib.lib
-        
-        if not exist scr\obj\dbt_mbr_protector.sys (
-          echo ERROR: x86 linking failed!
-          exit /b 1
-        )
-        
-        copy scr\dbt_mbr_protector.inf scr\obj\
-        
-        echo x86 Driver build complete!
-        
-    - name: Build x64 Kernel Driver
+    - name: Build Kernel Driver (x64 and x86)
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         
         mkdir scr\obj\x64 2>nul
+        mkdir scr\obj\x86 2>nul
         
+        echo Using WDK_VERSION: %WDK_VERSION%
+        
+        echo Building x64 driver...
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
@@ -150,6 +115,44 @@ jobs:
         )
         
         echo x64 Driver build complete!
+        
+        echo Building x86 driver...
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
+        
+        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
+          /D_X86_ ^
+          /D_WIN32 ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          /DNTDDI_VERSION=0x06010000 ^
+          /D_DISABLE_DEPRECATE_STRING_SDK_WARNINGS ^
+          /GS- ^
+          scr\dbt_mbr_protector.c ^
+          /Foscr\obj\x86\dbt_mbr_protector.obj
+        
+        if not exist scr\obj\x86\dbt_mbr_protector.obj (
+          echo ERROR: x86 compilation failed!
+          exit /b 1
+        )
+        
+        link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:scr\obj\x86\dbt_mbr_protector.sys ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
+          scr\obj\x86\dbt_mbr_protector.obj ^
+          ntoskrnl.lib hal.lib wmilib.lib
+        
+        if not exist scr\obj\x86\dbt_mbr_protector.sys (
+          echo ERROR: x86 linking failed!
+          exit /b 1
+        )
+        
+        copy scr\dbt_mbr_protector.inf scr\obj\
+        
+        echo x86 Driver build complete!
         
     - name: Build Notifier (Universal x86)
       shell: cmd
@@ -192,9 +195,9 @@ jobs:
             & $signtool.FullName sign /v /fd SHA256 /a /s My /n "CN=DBT Test Root" /t http://timestamp.digicert.com "scr\obj\x64\dbt_mbr_protector.sys"
           }
           
-          if (Test-Path "scr\obj\dbt_mbr_protector.sys") {
+          if (Test-Path "scr\obj\x86\dbt_mbr_protector.sys") {
             Write-Host "Signing x86 driver..."
-            & $signtool.FullName sign /v /fd SHA256 /a /s My /n "CN=DBT Test Root" /t http://timestamp.digicert.com "scr\obj\dbt_mbr_protector.sys"
+            & $signtool.FullName sign /v /fd SHA256 /a /s My /n "CN=DBT Test Root" /t http://timestamp.digicert.com "scr\obj\x86\dbt_mbr_protector.sys"
           }
           
           Write-Host "Signing complete!"
@@ -213,8 +216,8 @@ jobs:
         Copy-Item "scr\obj\dbt_mbr_protector.inf" "artifacts_x64\" -ErrorAction SilentlyContinue
         Copy-Item "notifier\obj\dbt_notifier.exe" "artifacts_x64\" -ErrorAction SilentlyContinue
         
-        Copy-Item "scr\obj\dbt_mbr_protector.sys" "artifacts_x86\" -ErrorAction SilentlyContinue
-        Copy-Item "scr\obj\dbt_mbr_protector.pdb" "artifacts_x86\" -ErrorAction SilentlyContinue
+        Copy-Item "scr\obj\x86\dbt_mbr_protector.sys" "artifacts_x86\" -ErrorAction SilentlyContinue
+        Copy-Item "scr\obj\x86\dbt_mbr_protector.pdb" "artifacts_x86\" -ErrorAction SilentlyContinue
         Copy-Item "scr\obj\dbt_mbr_protector.inf" "artifacts_x86\" -ErrorAction SilentlyContinue
         Copy-Item "notifier\obj\dbt_notifier.exe" "artifacts_x86\" -ErrorAction SilentlyContinue
         
