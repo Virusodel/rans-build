@@ -11,6 +11,13 @@
 #define PROTECTED_SECTOR_COUNT 10
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_GET_BLOCK_INFO CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+typedef struct _BLOCK_INFO {
+    ULONG64 BlockedCount;
+    ULONG PID;
+    CHAR ProcessName[256];
+} BLOCK_INFO, *PBLOCK_INFO;
 
 typedef struct _FILTER_EXTENSION {
     PDEVICE_OBJECT FilterDeviceObject;
@@ -22,6 +29,8 @@ typedef struct _FILTER_EXTENSION {
 } FILTER_EXTENSION, *PFILTER_EXTENSION;
 
 ULONG64 g_GlobalAttempts = 0;
+ULONG g_LastBlockedPid = 0;
+CHAR g_LastBlockedProcessName[MAX_PROCESS_NAME] = {0};
 KSPIN_LOCK g_GlobalLock;
 BOOLEAN g_EnableLogging = TRUE;
 
@@ -36,6 +45,7 @@ NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
     ULONG pid = (ULONG)PsGetCurrentProcessId();
     
+    UNREFERENCED_PARAMETER(Size);
     if (pPid) *pPid = pid;
     
     __try {
@@ -98,6 +108,8 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         KIRQL oldIrql;
         KeAcquireSpinLock(&g_GlobalLock, &oldIrql);
         g_GlobalAttempts++;
+        g_LastBlockedPid = pid;
+        RtlCopyMemory(g_LastBlockedProcessName, processName, MAX_PROCESS_NAME);
         ext->TotalAttempts++;
         ULONG64 attemptNumber = g_GlobalAttempts;
         KeReleaseSpinLock(&g_GlobalLock, oldIrql);
@@ -226,18 +238,49 @@ NTSTATUS DispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     NTSTATUS status = STATUS_INVALID_DEVICE_REQUEST;
     ULONG info = 0;
     
+    UNREFERENCED_PARAMETER(DeviceObject);
+    
     switch (code) {
-        case IOCTL_STORAGE_GET_DEVICE_NUMBER:
-        case 0x80000000:
+        case IOCTL_GET_ATTEMPTS:
         {
             if (Irp->AssociatedIrp.SystemBuffer && 
                 irpSp->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(ULONG64)) {
+                
+                KIRQL oldIrql;
+                KeAcquireSpinLock(&g_GlobalLock, &oldIrql);
                 *(PULONG64)Irp->AssociatedIrp.SystemBuffer = g_GlobalAttempts;
+                KeReleaseSpinLock(&g_GlobalLock, oldIrql);
+                
                 info = sizeof(ULONG64);
                 status = STATUS_SUCCESS;
+            } else {
+                status = STATUS_BUFFER_TOO_SMALL;
             }
             break;
         }
+        
+        case IOCTL_GET_BLOCK_INFO:
+        {
+            if (Irp->AssociatedIrp.SystemBuffer && 
+                irpSp->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(BLOCK_INFO)) {
+                
+                PBLOCK_INFO outInfo = (PBLOCK_INFO)Irp->AssociatedIrp.SystemBuffer;
+                
+                KIRQL oldIrql;
+                KeAcquireSpinLock(&g_GlobalLock, &oldIrql);
+                outInfo->BlockedCount = g_GlobalAttempts;
+                outInfo->PID = g_LastBlockedPid;
+                RtlCopyMemory(outInfo->ProcessName, g_LastBlockedProcessName, MAX_PROCESS_NAME);
+                KeReleaseSpinLock(&g_GlobalLock, oldIrql);
+                
+                info = sizeof(BLOCK_INFO);
+                status = STATUS_SUCCESS;
+            } else {
+                status = STATUS_BUFFER_TOO_SMALL;
+            }
+            break;
+        }
+        
         default:
             status = STATUS_INVALID_DEVICE_REQUEST;
             break;
@@ -273,12 +316,15 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     ULONG i;
     UNICODE_STRING symLinkName;
     UNICODE_STRING deviceName;
+    NTSTATUS status;
     
     DbgPrint("[DBT] DBT MBR Protector loading...\n");
     DbgPrint("[DBT] RegistryPath: %wZ\n", RegistryPath);
     
     KeInitializeSpinLock(&g_GlobalLock);
     g_GlobalAttempts = 0;
+    g_LastBlockedPid = 0;
+    RtlZeroMemory(g_LastBlockedProcessName, sizeof(g_LastBlockedProcessName));
     
     for (i = 0; i < IRP_MJ_MAXIMUM_FUNCTION; i++) {
         DriverObject->MajorFunction[i] = DispatchPassThrough;
@@ -290,7 +336,10 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     
     RtlInitUnicodeString(&deviceName, DEVICE_NAME);
     RtlInitUnicodeString(&symLinkName, SYM_LINK_NAME);
-    IoCreateSymbolicLink(&symLinkName, &deviceName);
+    status = IoCreateSymbolicLink(&symLinkName, &deviceName);
+    if (!NT_SUCCESS(status)) {
+        DbgPrint("[DBT] Failed to create symbolic link: 0x%X\n", status);
+    }
     
     AttachToAllDisks(DriverObject);
     
