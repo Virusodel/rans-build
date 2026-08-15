@@ -70,17 +70,18 @@ jobs:
         )
         echo Driver build complete!
         
-    - name: Build Notifier
+        - name: Build Notifier (Universal x86)
       shell: cmd
       run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+        rem Переключаем сборочную среду Visual Studio на 32-битный компилятор (x86)
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
         
         mkdir notifier\obj 2>nul
         
+        rem Компилируем код с макросом _X86_ вместо 64-битного AMD64
         cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_AMD64_ ^
-          /D_WIN64 ^
+          /D_X86_ ^
           notifier\dbt_notifier.cpp ^
           /Fonotifier\obj\dbt_notifier.obj
         
@@ -89,12 +90,13 @@ jobs:
           exit /b 1
         )
         
-        link /MACHINE:X64 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x64" ^
+        rem Линкуем исполняемый файл под 32-битную машину (MACHINE:X86) и подтягиваем x86 библиотеки
+        link /MACHINE:X86 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
           notifier\obj\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
-        echo Notifier build complete!
+        echo Universal Notifier build complete!
         
     - name: Sign Driver
       shell: pwsh
