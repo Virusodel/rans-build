@@ -21,6 +21,7 @@ jobs:
       shell: pwsh
       run: |
         choco install windows-sdk-10-version-2004-windbg -y
+        choco install windows-wdk-10-version-2004 -y
         
         $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
         if ($ntddk) {
@@ -50,62 +51,37 @@ jobs:
           }
         }
         
-    - name: Build x64 Kernel Driver
+    - name: Build Kernel Driver
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         
-        msbuild dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10 /p:SignMode=Off
+        rem Устанавливаем переменные для WDK
+        set WDK_DIR=C:\Program Files (x86)\Windows Kits\10
+        set WDK_VERSION=%WDK_VERSION%
         
-        mkdir scr\obj\x64 2>nul
+        rem Безопасная сборка через проект vcxproj для максимальной совместимости (Win 7 - Win 11)
+        msbuild dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10 /p:SignMode=Off /p:WindowsTargetPlatformVersion=10.0.19041.0
+        
+        rem Создаем структуру папок, которую ожидает остальная часть скрипта
+        mkdir scr\obj 2>nul
         if exist "x64\Release\dbt_mbr_protector\dbt_mbr_protector.sys" (
-          copy "x64\Release\dbt_mbr_protector\dbt_mbr_protector.sys" "scr\obj\x64\"
-          copy "x64\Release\dbt_mbr_protector\dbt_mbr_protector.pdb" "scr\obj\x64\"
+          copy "x64\Release\dbt_mbr_protector\dbt_mbr_protector.sys" scr\obj\
+          copy "x64\Release\dbt_mbr_protector\dbt_mbr_protector.pdb" scr\obj\
         ) else if exist "x64\Release\dbt_mbr_protector.sys" (
-          copy "x64\Release\dbt_mbr_protector.sys" "scr\obj\x64\"
-          copy "x64\Release\dbt_mbr_protector.pdb" "scr\obj\x64\"
+          copy "x64\Release\dbt_mbr_protector.sys" scr\obj\
+          copy "x64\Release\dbt_mbr_protector.pdb" scr\obj\
         ) else (
-          echo ERROR: x64 driver not found!
+          echo ERROR: MSBuild failed to create driver!
           exit /b 1
         )
+        copy scr\dbt_mbr_protector.inf scr\obj\
         
-        echo x64 Driver build complete!
-        
-    - name: Build x86 Kernel Driver (using older WDK)
-      shell: cmd
-      run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
-        
-        mkdir scr\obj\x86 2>nul
-        
-        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_X86_ ^
-          /D_WIN32 ^
-          /D_WIN32_WINNT=0x0601 ^
-          /DWINVER=0x0601 ^
-          /DNTDDI_VERSION=0x06010000 ^
-          scr\dbt_mbr_protector.c ^
-          /Foscr\obj\x86\dbt_mbr_protector.obj
-        
-        if not exist scr\obj\x86\dbt_mbr_protector.obj (
-          echo ERROR: x86 compilation failed!
+        if not exist scr\obj\dbt_mbr_protector.sys (
+          echo ERROR: Driver not found after build!
           exit /b 1
         )
-        
-        link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:scr\obj\x86\dbt_mbr_protector.sys ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
-          scr\obj\x86\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib
-        
-        if not exist scr\obj\x86\dbt_mbr_protector.sys (
-          echo ERROR: x86 linking failed!
-          exit /b 1
-        )
-        
-        echo x86 Driver build complete!
+        echo Driver build complete!
         
     - name: Build Notifier (Universal x86)
       shell: cmd
@@ -132,47 +108,55 @@ jobs:
         
         echo Universal Notifier build complete!
         
-    - name: Sign Drivers
+    - name: Sign Driver
       shell: pwsh
       run: |
+        $sysPath = "scr\obj\dbt_mbr_protector.sys"
+        
+        if (-not (Test-Path $sysPath)) {
+          Write-Host "ERROR: Driver not found for signing!"
+          exit 1
+        }
+        
+        $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DBT Test Root" `
+          -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
+          -TextExtension @("2.5.29.19={text}CA=true")
+        
         $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" | Select-Object -First 1
         
         if ($signtool) {
-          Write-Host "Generating self-signed test root certificate..."
-          $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DBT Test Root" `
-            -KeyUsage DigitalSignature -CertStoreLocation Cert:\CurrentUser\My `
-            -TextExtension @("2.5.29.19={text}CA=true")
+          Write-Host "Signing driver..."
+          & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com $sysPath
           
-          if (Test-Path "scr\obj\x64\dbt_mbr_protector.sys") {
-            Write-Host "Signing x64 driver..."
-            & $signtool.FullName sign /v /fd SHA256 /a /s My /n "CN=DBT Test Root" /t http://timestamp.digicert.com "scr\obj\x64\dbt_mbr_protector.sys"
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Driver signed successfully!"
+          } else {
+            Write-Host "Signing failed with code $LASTEXITCODE"
           }
-          
-          if (Test-Path "scr\obj\x86\dbt_mbr_protector.sys") {
-            Write-Host "Signing x86 driver..."
-            & $signtool.FullName sign /v /fd SHA256 /a /s My /n "CN=DBT Test Root" /t http://timestamp.digicert.com "scr\obj\x86\dbt_mbr_protector.sys"
-          }
-          
-          Write-Host "Signing complete!"
         } else {
-          Write-Host "WARNING: signtool not found, drivers will be unsigned"
+          Write-Host "WARNING: signtool not found, driver will be unsigned"
         }
         
-    - name: Create Installation Packages
+    - name: Create Installation Package
       shell: pwsh
       run: |
-        New-Item -ItemType Directory -Force -Path artifacts_x64
-        New-Item -ItemType Directory -Force -Path artifacts_x86
+        New-Item -ItemType Directory -Force -Path artifacts
         
-        Copy-Item "scr\obj\x64\dbt_mbr_protector.sys" "artifacts_x64\" -ErrorAction SilentlyContinue
-        Copy-Item "scr\obj\x64\dbt_mbr_protector.pdb" "artifacts_x64\" -ErrorAction SilentlyContinue
-        Copy-Item "scr\obj\dbt_mbr_protector.inf" "artifacts_x64\" -ErrorAction SilentlyContinue
-        Copy-Item "notifier\obj\dbt_notifier.exe" "artifacts_x64\" -ErrorAction SilentlyContinue
+        $files = @(
+          "scr\obj\dbt_mbr_protector.sys",
+          "scr\obj\dbt_mbr_protector.inf",
+          "scr\obj\dbt_mbr_protector.pdb",
+          "notifier\obj\dbt_notifier.exe"
+        )
         
-        Copy-Item "scr\obj\x86\dbt_mbr_protector.sys" "artifacts_x86\" -ErrorAction SilentlyContinue
-        Copy-Item "scr\obj\x86\dbt_mbr_protector.pdb" "artifacts_x86\" -ErrorAction SilentlyContinue
-        Copy-Item "scr\obj\dbt_mbr_protector.inf" "artifacts_x86\" -ErrorAction SilentlyContinue
-        Copy-Item "notifier\obj\dbt_notifier.exe" "artifacts_x86\" -ErrorAction SilentlyContinue
+        foreach ($file in $files) {
+          if (Test-Path $file) {
+            Copy-Item $file artifacts\
+            Write-Host "Copied $file"
+          } else {
+            Write-Host "WARNING: $file not found"
+          }
+        }
         
         $installBat = @"
         @echo off
@@ -223,9 +207,7 @@ jobs:
         echo.
         pause
         "@
-        
-        $installBat | Out-File -FilePath artifacts_x64\install.bat -Encoding ASCII
-        $installBat | Out-File -FilePath artifacts_x86\install.bat -Encoding ASCII
+        $installBat | Out-File -FilePath artifacts\install.bat -Encoding ASCII
         
         $uninstallBat = @"
         @echo off
@@ -263,9 +245,7 @@ jobs:
         echo.
         pause
         "@
-        
-        $uninstallBat | Out-File -FilePath artifacts_x64\uninstall.bat -Encoding ASCII
-        $uninstallBat | Out-File -FilePath artifacts_x86\uninstall.bat -Encoding ASCII
+        $uninstallBat | Out-File -FilePath artifacts\uninstall.bat -Encoding ASCII
         
         $readme = @"
         DBT MBR PROTECTOR - INSTALLATION GUIDE
@@ -294,7 +274,7 @@ jobs:
         
         REQUIREMENTS:
         -------------
-        - Windows 7/8/10/11 (x64 or x86)
+        - Windows 7/8/10/11 (x64)
         - Administrator privileges
         - Test signing mode (enabled by installer)
         
@@ -309,52 +289,27 @@ jobs:
         - Notifier runs in background and shows alerts
         - Requires reboot after installation
         "@
+        $readme | Out-File -FilePath artifacts\README.txt -Encoding ASCII
         
-        $readme | Out-File -FilePath artifacts_x64\README.txt -Encoding ASCII
-        $readme | Out-File -FilePath artifacts_x86\README.txt -Encoding ASCII
-        
-    - name: Upload x64 Artifacts
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: dbt-mbr-protector-suite-x64
-        path: artifacts_x64\*
+        name: dbt-mbr-protector-suite
+        path: artifacts\*
         retention-days: 30
         
-    - name: Upload x86 Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: dbt-mbr-protector-suite-x86
-        path: artifacts_x86\*
-        retention-days: 30
-        
-    - name: Create x64 Release Package
+    - name: Create Release Package
       if: github.ref == 'refs/heads/main'
       shell: pwsh
       run: |
         $version = Get-Date -Format "yyyy.MM.dd.HHmm"
-        $zipFile = "dbt-mbr-protector-x64-$version.zip"
-        Compress-Archive -Path artifacts_x64\* -DestinationPath $zipFile -Force
-        echo "ZIP_FILE_X64=$zipFile" | Out-File -FilePath $env:GITHUB_ENV -Append
+        $zipFile = "dbt-mbr-protector-$version.zip"
+        Compress-Archive -Path artifacts\* -DestinationPath $zipFile -Force
+        echo "ZIP_FILE=$zipFile" | Out-File -FilePath $env:GITHUB_ENV -Append
         
-    - name: Create x86 Release Package
-      if: github.ref == 'refs/heads/main'
-      shell: pwsh
-      run: |
-        $version = Get-Date -Format "yyyy.MM.dd.HHmm"
-        $zipFile = "dbt-mbr-protector-x86-$version.zip"
-        Compress-Archive -Path artifacts_x86\* -DestinationPath $zipFile -Force
-        echo "ZIP_FILE_X86=$zipFile" | Out-File -FilePath $env:GITHUB_ENV -Append
-        
-    - name: Upload x64 Release Package
+    - name: Upload Release Package
       if: github.ref == 'refs/heads/main'
       uses: actions/upload-artifact@v4
       with:
-        name: release-package-x64
-        path: ${{ env.ZIP_FILE_X64 }}
-        
-    - name: Upload x86 Release Package
-      if: github.ref == 'refs/heads/main'
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-package-x86
-        path: ${{ env.ZIP_FILE_X86 }}
+        name: release-package
+        path: ${{ env.ZIP_FILE }}
