@@ -63,9 +63,9 @@ jobs:
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
           /D_AMD64_ ^
           /D_WIN64 ^
-          /D_WIN32_WINNT=0x0601 ^
-          /DWINVER=0x0601 ^
-          /DNTDDI_VERSION=0x06010000 ^
+          /D_WIN32_WINNT=0x0A00 ^
+          /DWINVER=0x0A00 ^
+          /DNTDDI_VERSION=0x0A000000 ^
           scr\dbt_mbr_protector.c ^
           /Foscr\obj\dbt_mbr_protector.obj
         
