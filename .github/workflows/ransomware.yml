@@ -24,34 +24,46 @@ jobs:
         choco install windows-sdk-10-version-2004-windbg -y
         
         Write-Host "Downloading WDK 10.0.19041.0..."
-        $wdkUrl = "https://go.microsoft.com/fwlink/?linkid=2128854"
+        $wdkUrl = "https://download.microsoft.com/download/4/d/2/4d2b7011-606a-467e-99b4-99550bf24ffc/windowssdk/wdksetup.exe"
         $wdkInstaller = "$env:TEMP\wdksetup.exe"
         
-        Invoke-WebRequest -Uri $wdkUrl -OutFile $wdkInstaller
+        Invoke-WebRequest -Uri $wdkUrl -OutFile $wdkInstaller -UseBasicParsing
         
         Write-Host "Installing WDK silently..."
         Start-Process -FilePath $wdkInstaller -ArgumentList "/quiet /norestart /features +" -Wait
         
+        Write-Host "Waiting for installation to complete..."
+        Start-Sleep -Seconds 30
+        
         Write-Host "Checking WDK installation..."
         $kitPath = "C:\Program Files (x86)\Windows Kits\10"
         
-        # Проверяем наличие ntddk.h
-        $ntddk = Get-ChildItem "$kitPath\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
+        $ntddk = Get-ChildItem "$kitPath\Include" -Recurse -Filter "ntddk.h" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match "\\Include\\\d+\.\d+\.\d+\.\d+\\" } | Select-Object -First 1
+        
         if ($ntddk) {
-          $version = $ntddk.Directory.Parent.Parent.Name
+          $version = ($ntddk.FullName -split "\\Include\\")[1] -split "\\" | Select-Object -First 1
           Write-Host "Found WDK Version: $version"
-          
-          # Сохраняем версию
           echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
         } else {
-          Write-Host "ntddk.h not found! Using fallback version."
-          echo "WDK_VERSION=10.0.19041.0" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "ntddk.h not found! Checking available versions..."
+          
+          $versions = Get-ChildItem "$kitPath\Include" -Directory | Where-Object { $_.Name -match "^\d+\.\d+\.\d+\.\d+$" }
+          if ($versions) {
+            $version = $versions[-1].Name
+            Write-Host "Found WDK Version from folder: $version"
+            echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          } else {
+            Write-Host "No WDK found! Using fallback version 10.0.19041.0"
+            echo "WDK_VERSION=10.0.19041.0" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
         }
         
-        Write-Host "Setting up x86 library paths..."
-        $libPath = "$kitPath\Lib\$env:WDK_VERSION\km\x86"
+        Write-Host "Final WDK_VERSION: $env:WDK_VERSION"
+        
+        $libPath = "C:\Program Files (x86)\Windows Kits\10\Lib\$env:WDK_VERSION\km\x86"
         if (!(Test-Path $libPath)) {
           New-Item -ItemType Directory -Force -Path $libPath
+          Write-Host "Created x86 library folder"
         }
         
         Write-Host "Installation complete!"
@@ -83,9 +95,9 @@ jobs:
         
         echo Using WDK_VERSION: %WDK_VERSION%
         echo Checking includes...
-        dir "C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km\" 2>nul
+        dir "C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" 2>nul
         echo Checking x86 libraries...
-        dir "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86\" 2>nul
+        dir "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" 2>nul
         
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
