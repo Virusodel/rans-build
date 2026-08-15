@@ -1,216 +1,78 @@
-name: Find WDK Paths for x86
+name: Build DBT MBR Protector (x86 with WDK)
 
 on:
   workflow_dispatch:
 
 jobs:
-  find-paths:
+  build:
     runs-on: windows-2022
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Find all WDK library paths
+    - name: Setup Visual Studio
+      uses: microsoft/setup-msbuild@v2
+      with:
+        vs-version: '17.0'
+        
+    - name: Install WDK for x86
       shell: pwsh
       run: |
-        $version = "10.0.26100.0"
-        $basePath = "C:\Program Files (x86)\Windows Kits\10\Lib\$version"
+        # Установка WDK (включая x86)
+        choco install windows-sdk-10-version-2004-windbg -y
+        choco install wdk -y --version=10.0.19041.0
         
-        Write-Host "========================================="
-        Write-Host "SEARCHING FOR WDK LIBRARIES (x86)"
-        Write-Host "========================================="
-        Write-Host ""
+        # Проверка наличия библиотек
+        $libs = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" -Recurse -Filter "ntoskrnl.lib"
+        Write-Host "Found ntoskrnl.lib at:"
+        $libs | ForEach-Object { Write-Host $_.FullName }
         
-        Write-Host "1. Checking if base path exists:"
-        if (Test-Path $basePath) {
-          Write-Host "   $basePath EXISTS"
-        } else {
-          Write-Host "   $basePath NOT FOUND"
-          Write-Host "   Trying alternative paths..."
-          $basePath = "C:\Program Files (x86)\Windows Kits\10\Lib"
-          if (Test-Path $basePath) {
-            Write-Host "    Using: $basePath"
-          } else {
-            Write-Host "   No WDK Lib folder found!"
-            exit 1
-          }
-        }
-        Write-Host ""
+    - name: Build x86 Driver
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
         
-        Write-Host "2. Searching for ntoskrnl.lib:"
-        $found = Get-ChildItem -Path $basePath -Recurse -Filter "ntoskrnl.lib" -ErrorAction SilentlyContinue
-        if ($found) {
-          foreach ($f in $found) {
-            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
-            Write-Host "    $($f.FullName) ($size KB)"
-          }
-        } else {
-          Write-Host "   ntoskrnl.lib NOT FOUND ANYWHERE!"
-        }
-        Write-Host ""
+        mkdir artifacts_x86 2>nul
         
-        Write-Host "3. Searching for hal.lib:"
-        $found = Get-ChildItem -Path $basePath -Recurse -Filter "hal.lib" -ErrorAction SilentlyContinue
-        if ($found) {
-          foreach ($f in $found) {
-            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
-            Write-Host "   $($f.FullName) ($size KB)"
-          }
-        } else {
-          Write-Host "    hal.lib NOT FOUND ANYWHERE!"
-        }
-        Write-Host ""
+        :: Пути к WDK
+        set WDK_VERSION=10.0.19041.0
+        set WDK_INC=C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%
+        set WDK_LIB=C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%
         
-        Write-Host "4. Searching for user32.lib:"
-        $found = Get-ChildItem -Path $basePath -Recurse -Filter "user32.lib" -ErrorAction SilentlyContinue
-        if ($found) {
-          foreach ($f in $found) {
-            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
-            Write-Host "   $($f.FullName) ($size KB)"
-          }
-        } else {
-          Write-Host "   user32.lib NOT FOUND ANYWHERE!"
-        }
-        Write-Host ""
+        :: Компиляция
+        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
+          /I"%WDK_INC%\km" ^
+          /I"%WDK_INC%\shared" ^
+          /I"%WDK_INC%\um" ^
+          /D_X86_ ^
+          /D_WIN32 ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          /DNTDDI_VERSION=0x06010000 ^
+          scr\dbt_mbr_protector.c ^
+          /Foartifacts_x86\dbt_mbr_protector.obj
         
-        Write-Host "5. Searching for kernel32.lib:"
-        $found = Get-ChildItem -Path $basePath -Recurse -Filter "kernel32.lib" -ErrorAction SilentlyContinue
-        if ($found) {
-          foreach ($f in $found) {
-            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
-            Write-Host "   $($f.FullName) ($size KB)"
-          }
-        } else {
-          Write-Host "    kernel32.lib NOT FOUND ANYWHERE!"
-        }
-        Write-Host ""
+        if not exist artifacts_x86\dbt_mbr_protector.obj (
+          echo ERROR: x86 Compilation failed!
+          exit /b 1
+        )
         
-        Write-Host "6. Searching for psapi.lib:"
-        $found = Get-ChildItem -Path $basePath -Recurse -Filter "psapi.lib" -ErrorAction SilentlyContinue
-        if ($found) {
-          foreach ($f in $found) {
-            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
-            Write-Host "   $($f.FullName) ($size KB)"
-          }
-        } else {
-          Write-Host "    psapi.lib NOT FOUND ANYWHERE!"
-        }
-        Write-Host ""
+        :: Линковка
+        link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts_x86\dbt_mbr_protector.sys ^
+          /LIBPATH:"%WDK_LIB%\km\i386" ^
+          artifacts_x86\dbt_mbr_protector.obj ^
+          ntoskrnl.lib hal.lib
         
-        Write-Host "7. Searching for shlwapi.lib:"
-        $found = Get-ChildItem -Path $basePath -Recurse -Filter "shlwapi.lib" -ErrorAction SilentlyContinue
-        if ($found) {
-          foreach ($f in $found) {
-            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
-            Write-Host "    $($f.FullName) ($size KB)"
-          }
-        } else {
-          Write-Host "    shlwapi.lib NOT FOUND ANYWHERE!"
-        }
-        Write-Host ""
+        if not exist artifacts_x86\dbt_mbr_protector.sys (
+          echo ERROR: x86 Linking failed!
+          exit /b 1
+        )
         
-        Write-Host "8. Searching for advapi32.lib:"
-        $found = Get-ChildItem -Path $basePath -Recurse -Filter "advapi32.lib" -ErrorAction SilentlyContinue
-        if ($found) {
-          foreach ($f in $found) {
-            $size = [math]::Round((Get-Item $f.FullName).Length / 1KB, 2)
-            Write-Host "    $($f.FullName) ($size KB)"
-          }
-        } else {
-          Write-Host "    advapi32.lib NOT FOUND ANYWHERE!"
-        }
-        Write-Host ""
+        echo x86 build complete!
         
-        Write-Host "========================================="
-        Write-Host "FULL DIRECTORY STRUCTURE (km folder)"
-        Write-Host "========================================="
-        $kmPath = "$basePath\km"
-        if (Test-Path $kmPath) {
-          Get-ChildItem $kmPath -Directory | ForEach-Object {
-            Write-Host "km\$($_.Name)"
-            $libs = Get-ChildItem $_.FullName -Filter "*.lib" -ErrorAction SilentlyContinue
-            if ($libs) {
-              foreach ($lib in $libs) {
-                Write-Host "    $($lib.Name)"
-              }
-            } else {
-              Write-Host "    (empty)"
-            }
-          }
-        } else {
-          Write-Host "km folder NOT FOUND!"
-        }
-        Write-Host ""
-        
-        Write-Host "========================================="
-        Write-Host "FULL DIRECTORY STRUCTURE (um folder)"
-        Write-Host "========================================="
-        $umPath = "$basePath\um"
-        if (Test-Path $umPath) {
-          Get-ChildItem $umPath -Directory | ForEach-Object {
-            Write-Host " um\$($_.Name)"
-            $libs = Get-ChildItem $_.FullName -Filter "*.lib" -ErrorAction SilentlyContinue
-            if ($libs) {
-              foreach ($lib in $libs) {
-                Write-Host "    $($lib.Name)"
-              }
-            } else {
-              Write-Host "    (empty)"
-            }
-          }
-        } else {
-          Write-Host " um folder NOT FOUND!"
-        }
-        Write-Host ""
-        
-        Write-Host "========================================="
-        Write-Host "RECOMMENDED PATHS FOR x86:"
-        Write-Host "========================================="
-        $ntoskrnl = Get-ChildItem -Path $basePath -Recurse -Filter "ntoskrnl.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
-        if ($ntoskrnl) {
-          Write-Host "ntoskrnl.lib: $($ntoskrnl.FullName)"
-        } else {
-          Write-Host "ntoskrnl.lib: NOT FOUND for x86!"
-        }
-        
-        $hal = Get-ChildItem -Path $basePath -Recurse -Filter "hal.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
-        if ($hal) {
-          Write-Host "hal.lib: $($hal.FullName)"
-        } else {
-          Write-Host "hal.lib: NOT FOUND for x86!"
-        }
-        
-        $user32 = Get-ChildItem -Path $basePath -Recurse -Filter "user32.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
-        if ($user32) {
-          Write-Host "user32.lib: $($user32.FullName)"
-        } else {
-          Write-Host "user32.lib: NOT FOUND for x86!"
-        }
-        
-        $kernel32 = Get-ChildItem -Path $basePath -Recurse -Filter "kernel32.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
-        if ($kernel32) {
-          Write-Host "kernel32.lib: $($kernel32.FullName)"
-        } else {
-          Write-Host "kernel32.lib: NOT FOUND for x86!"
-        }
-        
-        $psapi = Get-ChildItem -Path $basePath -Recurse -Filter "psapi.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
-        if ($psapi) {
-          Write-Host "psapi.lib: $($psapi.FullName)"
-        } else {
-          Write-Host "psapi.lib: NOT FOUND for x86!"
-        }
-        
-        $shlwapi = Get-ChildItem -Path $basePath -Recurse -Filter "shlwapi.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
-        if ($shlwapi) {
-          Write-Host "shlwapi.lib: $($shlwapi.FullName)"
-        } else {
-          Write-Host "shlwapi.lib: NOT FOUND for x86!"
-        }
-        
-        $advapi32 = Get-ChildItem -Path $basePath -Recurse -Filter "advapi32.lib" -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -match "i386|x86|32" } | Select-Object -First 1
-        if ($advapi32) {
-          Write-Host "advapi32.lib: $($advapi32.FullName)"
-        } else {
-          Write-Host "advapi32.lib: NOT FOUND for x86!"
-        }
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dbt-mbr-protector-x86
+        path: artifacts_x86\*
+        retention-days: 30
