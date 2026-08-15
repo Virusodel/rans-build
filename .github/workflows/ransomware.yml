@@ -17,19 +17,24 @@ jobs:
       with:
         vs-version: '17.0'
         
-    - name: Install Windows SDK & WDK
+    - name: Install Legacy WDK with x86 support
       shell: pwsh
       run: |
-        choco install windows-sdk-10-version-2004-windbg -y
+        Write-Host "Installing WDK 10.0.18362.0..."
+        $wdkUrl = "https://go.microsoft.com/fwlink/?linkid=2085767"
+        $wdkInstaller = "$env:TEMP\wdksetup.exe"
+        Invoke-WebRequest -Uri $wdkUrl -OutFile $wdkInstaller -UseBasicParsing
+        Start-Process -FilePath $wdkInstaller -ArgumentList "/quiet /norestart /features +" -Wait
+        Write-Host "WDK installation complete!"
         
         $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
         if ($ntddk) {
-          $version = $ntddk.Directory.Parent.Name
-          Write-Host "Using WDK Version: $version"
+          $version = $ntddk.Directory.Parent.Parent.Name
+          Write-Host "Found WDK Version: $version"
           echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
         } else {
-          Write-Host "ntddk.h not found!"
-          exit 1
+          Write-Host "ntddk.h not found! Using fallback..."
+          echo "WDK_VERSION=10.0.18362.0" | Out-File -FilePath $env:GITHUB_ENV -Append
         }
         
     - name: Verify Source Files
@@ -55,14 +60,10 @@ jobs:
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         
-        powershell -Command "$files = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\build\*\WindowsDriver.Common.targets'; foreach($f in $files) { (Get-Content $f.FullName -Raw) -replace \"'x86'\", \"'xx86'\" | Set-Content $f.FullName -NoNewline }"
-        
         mkdir scr\obj\x64 2>nul
         mkdir scr\obj\x86 2>nul
         
         msbuild dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10 /p:SignMode=Off
-        
-        msbuild dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=Win32 /p:TargetVersion=Windows10 /p:SignMode=Off
         
         if exist "x64\Release\dbt_mbr_protector\dbt_mbr_protector.sys" (
           copy "x64\Release\dbt_mbr_protector\dbt_mbr_protector.sys" "scr\obj\x64\"
@@ -75,20 +76,38 @@ jobs:
           exit /b 1
         )
         
-        if exist "Win32\Release\dbt_mbr_protector\dbt_mbr_protector.sys" (
-          copy "Win32\Release\dbt_mbr_protector\dbt_mbr_protector.sys" "scr\obj\x86\"
-          copy "Win32\Release\dbt_mbr_protector\dbt_mbr_protector.pdb" "scr\obj\x86\"
-        ) else if exist "Win32\Release\dbt_mbr_protector.sys" (
-          copy "Win32\Release\dbt_mbr_protector.sys" "scr\obj\x86\"
-          copy "Win32\Release\dbt_mbr_protector.pdb" "scr\obj\x86\"
-        ) else if exist "Release\dbt_mbr_protector\dbt_mbr_protector.sys" (
-          copy "Release\dbt_mbr_protector\dbt_mbr_protector.sys" "scr\obj\x86\"
-          copy "Release\dbt_mbr_protector\dbt_mbr_protector.pdb" "scr\obj\x86\"
-        ) else if exist "Release\dbt_mbr_protector.sys" (
-          copy "Release\dbt_mbr_protector.sys" "scr\obj\x86\"
-          copy "Release\dbt_mbr_protector.pdb" "scr\obj\x86\"
-        ) else (
-          echo ERROR: x86 driver not found!
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
+        
+        echo Using WDK_VERSION: %WDK_VERSION%
+        
+        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
+          /D_X86_ ^
+          /D_WIN32 ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          /DNTDDI_VERSION=0x06010000 ^
+          /D_DISABLE_DEPRECATE_STRING_SDK_WARNINGS ^
+          /GS- ^
+          scr\dbt_mbr_protector.c ^
+          /Foscr\obj\x86\dbt_mbr_protector.obj
+        
+        if not exist scr\obj\x86\dbt_mbr_protector.obj (
+          echo ERROR: x86 compilation failed!
+          exit /b 1
+        )
+        
+        link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:scr\obj\x86\dbt_mbr_protector.sys ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
+          scr\obj\x86\dbt_mbr_protector.obj ^
+          ntoskrnl.lib hal.lib wmilib.lib
+        
+        if not exist scr\obj\x86\dbt_mbr_protector.sys (
+          echo ERROR: x86 linking failed!
           exit /b 1
         )
         
