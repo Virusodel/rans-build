@@ -15,6 +15,13 @@
 #pragma comment(lib, "user32.lib")
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_GET_BLOCK_INFO CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+typedef struct _BLOCK_INFO {
+    ULONG64 BlockedCount;
+    ULONG PID;
+    CHAR ProcessName[256];
+} BLOCK_INFO;
 
 struct LanguageStrings {
     const wchar_t* Title;
@@ -95,27 +102,6 @@ std::wstring GetProcessNameFromId(DWORD pid) {
     return L"Unknown";
 }
 
-std::wstring GetCurrentProcessNameFromSnapshot() {
-    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnapshot == INVALID_HANDLE_VALUE) return L"Unknown";
-    
-    PROCESSENTRY32W pe32;
-    pe32.dwSize = sizeof(PROCESSENTRY32W);
-    DWORD currentPid = GetCurrentProcessId();
-    
-    if (Process32FirstW(hSnapshot, &pe32)) {
-        do {
-            if (pe32.th32ProcessID == currentPid) {
-                CloseHandle(hSnapshot);
-                return std::wstring(pe32.szExeFile);
-            }
-        } while (Process32NextW(hSnapshot, &pe32));
-    }
-    
-    CloseHandle(hSnapshot);
-    return L"Unknown";
-}
-
 DWORD WINAPI MonitorThread(LPVOID param) {
     int lang = *(int*)param;
     LanguageStrings str = GetStrings(lang);
@@ -142,28 +128,34 @@ DWORD WINAPI MonitorThread(LPVOID param) {
                             &currentAttempts, sizeof(ULONG64), &bytesReturned, NULL)) {
             
             if (currentAttempts > lastAttempts) {
-                ULONG64 blockedCount = currentAttempts - lastAttempts;
-                std::wstring processName = GetCurrentProcessNameFromSnapshot();
-                DWORD pid = GetCurrentProcessId();
+                BLOCK_INFO blockInfo = {0};
                 
-                WCHAR msg[1024];
-                wsprintfW(msg, 
-                    L"DBT MBR Protector\n\n"
-                    L"%s\n\n"
-                    L"%s\n"
-                    L"%s\n"
-                    L"   %s\n"
-                    L"%s\n\n"
-                    L"%s",
-                    str.AlertHeader, blockedCount,
-                    str.AlertProcess, processName.c_str(), pid,
-                    str.AlertDrive,
-                    str.AlertAction,
-                    str.AlertTotal, currentAttempts,
-                    str.AlertNote);
-                
-                MessageBoxW(NULL, msg, str.AlertTitle, 
-                           MB_OK | MB_ICONWARNING | MB_SYSTEMMODAL | MB_TOPMOST);
+                if (DeviceIoControl(hDevice, IOCTL_GET_BLOCK_INFO, NULL, 0,
+                                    &blockInfo, sizeof(BLOCK_INFO), &bytesReturned, NULL)) {
+                    
+                    std::wstring processName = std::wstring(blockInfo.ProcessName, 
+                                                            blockInfo.ProcessName + strlen(blockInfo.ProcessName));
+                    ULONG64 blockedCount = currentAttempts - lastAttempts;
+                    
+                    WCHAR msg[1024];
+                    wsprintfW(msg, 
+                        L"DBT MBR Protector\n\n"
+                        L"%s\n\n"
+                        L"%s\n"
+                        L"%s\n"
+                        L"   %s\n"
+                        L"%s\n\n"
+                        L"%s",
+                        str.AlertHeader, blockedCount,
+                        str.AlertProcess, processName.c_str(), blockInfo.PID,
+                        str.AlertDrive,
+                        str.AlertAction,
+                        str.AlertTotal, currentAttempts,
+                        str.AlertNote);
+                    
+                    MessageBoxW(NULL, msg, str.AlertTitle, 
+                               MB_OK | MB_ICONWARNING | MB_SYSTEMMODAL | MB_TOPMOST);
+                }
                 
                 lastAttempts = currentAttempts;
             }
