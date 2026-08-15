@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: windows-2019
     
     steps:
     - uses: actions/checkout@v4
@@ -15,7 +15,7 @@ jobs:
     - name: Setup Visual Studio
       uses: microsoft/setup-msbuild@v2
       with:
-        vs-version: '17.0'
+        vs-version: '16.0'
         
     - name: Install Windows SDK & WDK
       shell: pwsh
