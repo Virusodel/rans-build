@@ -14,8 +14,6 @@
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_GET_BLOCK_INFO CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-extern PCHAR PsGetProcessImageFileName(PEPROCESS Process);
-
 typedef struct _BLOCK_INFO {
     ULONG64 BlockedCount;
     ULONG PID;
@@ -47,22 +45,84 @@ const char* SuspiciousProcesses[] = {
 NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
     ULONG pid = (ULONG)(ULONG_PTR)PsGetCurrentProcessId();
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
     
     if (pPid) *pPid = pid;
     
+    if (!ProcessName || Size == 0) {
+        return STATUS_INVALID_PARAMETER;
+    }
+    
     __try {
-        PCHAR pName = PsGetProcessImageFileName(CurrentProcess);
+        PCHAR pName = NULL;
+        
+#if defined(_WIN64) || defined(_AMD64_)
+        pName = PsGetProcessImageFileName(CurrentProcess);
         if (pName) {
             RtlStringCchPrintfA(ProcessName, Size, "%s", pName);
-            return STATUS_SUCCESS;
+            status = STATUS_SUCCESS;
         }
+#else
+        PEPROCESS pProcess = CurrentProcess;
+        ULONG_PTR peb = 0;
+        UNICODE_STRING imageName;
+        ANSI_STRING ansiName;
+        CHAR buffer[256];
+        
+        __asm {
+            mov eax, [pProcess]
+            mov eax, [eax + 0x160]
+            mov [peb], eax
+        }
+        
+        if (peb) {
+            ULONG_PTR imageBase = 0;
+            __asm {
+                mov eax, [peb]
+                mov eax, [eax + 0x0C]
+                mov [imageBase], eax
+            }
+            
+            if (imageBase) {
+                ULONG_PTR imagePath = imageBase + 0x030;
+                __asm {
+                    mov eax, [imagePath]
+                    mov eax, [eax]
+                    mov [imagePath], eax
+                }
+                
+                if (imagePath) {
+                    RtlInitUnicodeString(&imageName, (PWSTR)imagePath);
+                    RtlUnicodeStringToAnsiString(&ansiName, &imageName, TRUE);
+                    
+                    if (ansiName.Buffer) {
+                        RtlStringCchPrintfA(ProcessName, Size, "%s", ansiName.Buffer);
+                        RtlFreeAnsiString(&ansiName);
+                        status = STATUS_SUCCESS;
+                    }
+                }
+            }
+        }
+        
+        if (!NT_SUCCESS(status)) {
+            PUCHAR processNamePtr = (PUCHAR)CurrentProcess + 0x16C;
+            if (processNamePtr) {
+                RtlStringCchPrintfA(ProcessName, Size, "%s", (PCHAR)processNamePtr);
+                status = STATUS_SUCCESS;
+            }
+        }
+#endif
+        
     } __except(EXCEPTION_EXECUTE_HANDLER) {
         RtlStringCchPrintfA(ProcessName, Size, "UNKNOWN");
         return STATUS_UNSUCCESSFUL;
     }
     
-    RtlStringCchPrintfA(ProcessName, Size, "UNKNOWN");
-    return STATUS_SUCCESS;
+    if (!NT_SUCCESS(status)) {
+        RtlStringCchPrintfA(ProcessName, Size, "UNKNOWN");
+    }
+    
+    return status;
 }
 
 BOOLEAN IsSuspiciousProcess(PCHAR ProcessName) {
