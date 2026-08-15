@@ -20,24 +20,58 @@ jobs:
     - name: Install Windows SDK & WDK
       shell: pwsh
       run: |
+        Write-Host "Installing Windows SDK..."
         choco install windows-sdk-10-version-2004-windbg -y
-        choco install windows-wdk-10-version-2004 -y
         
-        $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
+        Write-Host "Downloading WDK 10.0.19041.0..."
+        $wdkUrl = "https://go.microsoft.com/fwlink/?linkid=2128854"
+        $wdkInstaller = "$env:TEMP\wdksetup.exe"
+        
+        Invoke-WebRequest -Uri $wdkUrl -OutFile $wdkInstaller
+        
+        Write-Host "Installing WDK silently..."
+        Start-Process -FilePath $wdkInstaller -ArgumentList "/quiet /norestart /features +" -Wait
+        
+        Write-Host "Checking WDK installation..."
+        $kitPath = "C:\Program Files (x86)\Windows Kits\10"
+        
+        # Проверяем наличие ntddk.h
+        $ntddk = Get-ChildItem "$kitPath\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
         if ($ntddk) {
-          $version = $ntddk.Directory.Parent.Name
-          Write-Host "Using WDK Version: $version"
+          $version = $ntddk.Directory.Parent.Parent.Name
+          Write-Host "Found WDK Version: $version"
+          
+          # Сохраняем версию
           echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
         } else {
-          Write-Host "ntddk.h not found!"
-          exit 1
+          Write-Host "ntddk.h not found! Using fallback version."
+          echo "WDK_VERSION=10.0.19041.0" | Out-File -FilePath $env:GITHUB_ENV -Append
         }
         
-        # Проверяем наличие x86 библиотек
-        $libPath = "C:\Program Files (x86)\Windows Kits\10\Lib\$env:WDK_VERSION\km\x86"
+        Write-Host "Setting up x86 library paths..."
+        $libPath = "$kitPath\Lib\$env:WDK_VERSION\km\x86"
         if (!(Test-Path $libPath)) {
-          Write-Host "Creating x86 lib directory..."
-          mkdir $libPath -Force
+          New-Item -ItemType Directory -Force -Path $libPath
+        }
+        
+        Write-Host "Installation complete!"
+        
+    - name: Verify Source Files
+      shell: pwsh
+      run: |
+        $files = @(
+          "scr\dbt_mbr_protector.c",
+          "scr\dbt_mbr_protector.inf",
+          "notifier\dbt_notifier.cpp"
+        )
+        
+        foreach ($file in $files) {
+          if (Test-Path $file) {
+            Write-Host "$file found"
+          } else {
+            Write-Host "$file MISSING"
+            exit 1
+          }
         }
         
     - name: Build Kernel Driver (x86)
@@ -48,9 +82,10 @@ jobs:
         mkdir scr\obj 2>nul
         
         echo Using WDK_VERSION: %WDK_VERSION%
+        echo Checking includes...
+        dir "C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km\" 2>nul
         echo Checking x86 libraries...
         dir "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86\" 2>nul
-        dir "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\" 2>nul
         
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
@@ -74,7 +109,7 @@ jobs:
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
           scr\obj\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib
+          ntoskrnl.lib hal.lib wmilib.lib
         
         if not exist scr\obj\dbt_mbr_protector.sys (
           echo ERROR: x86 linking failed!
