@@ -63,6 +63,7 @@ jobs:
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
           /DNTDDI_VERSION=0x06010000 ^
+          /D_DISABLE_DEPRECATE_STRING_SDK_WARNINGS ^
           scr\dbt_mbr_protector.c ^
           /Foscr\obj\dbt_mbr_protector.obj
         
@@ -75,8 +76,13 @@ jobs:
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um" ^
+          /DEFAULTLIB:ntoskrnl.lib ^
+          /DEFAULTLIB:hal.lib ^
+          /DEFAULTLIB:wmilib.lib ^
+          /DEFAULTLIB:ntstrsafe.lib ^
           scr\obj\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib wmilib.lib
+          ntoskrnl.lib hal.lib wmilib.lib ntstrsafe.lib
         
         if not exist scr\obj\dbt_mbr_protector.sys (
           echo ERROR: x86 linking failed!
