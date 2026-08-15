@@ -11,7 +11,6 @@
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-// Структура GPT заголовка
 typedef struct _GPT_HEADER {
     UCHAR Signature[8];
     UCHAR Revision[4];
@@ -84,7 +83,6 @@ BOOLEAN IsSuspiciousProcess(PCHAR ProcessName) {
     return FALSE;
 }
 
-// Проверка, является ли диск GPT
 BOOLEAN IsGPTDisk(PDEVICE_OBJECT PhysicalDevice, PULONGLONG pPartitionEntryLBA, PULONG pEntryCount) {
     NTSTATUS status;
     PIRP irp;
@@ -96,14 +94,12 @@ BOOLEAN IsGPTDisk(PDEVICE_OBJECT PhysicalDevice, PULONGLONG pPartitionEntryLBA, 
     PDEVICE_OBJECT targetDevice = NULL;
     BOOLEAN result = FALSE;
     
-    // Открываем устройство
     status = IoGetDeviceObjectPointer(&PhysicalDevice->DriverObject->DriverName, 
                                       FILE_READ_DATA, &fileObject, &targetDevice);
     if (!NT_SUCCESS(status)) {
         return FALSE;
     }
     
-    // Читаем сектор 1 (GPT заголовок)
     KeInitializeEvent(&event, NotificationEvent, FALSE);
     byteOffset.QuadPart = SECTOR_SIZE;
     
@@ -127,7 +123,6 @@ BOOLEAN IsGPTDisk(PDEVICE_OBJECT PhysicalDevice, PULONGLONG pPartitionEntryLBA, 
         return FALSE;
     }
     
-    // Проверяем сигнатуру GPT
     if (gptHeader.Signature[0] == 'E' &&
         gptHeader.Signature[1] == 'F' &&
         gptHeader.Signature[2] == 'I' &&
@@ -150,24 +145,19 @@ BOOLEAN IsGPTDisk(PDEVICE_OBJECT PhysicalDevice, PULONGLONG pPartitionEntryLBA, 
     return result;
 }
 
-// Проверка защиты сектора (динамическая)
 BOOLEAN IsProtectedSector(PFILTER_EXTENSION ext, ULONGLONG ByteOffset, ULONG Length) {
     ULONGLONG sector = ByteOffset / SECTOR_SIZE;
     ULONGLONG endSector = (ByteOffset + Length - 1) / SECTOR_SIZE;
     
-    // Защита MBR (сектор 0)
     if (sector == 0) {
         return TRUE;
     }
     
-    // Защита GPT (если обнаружена)
     if (ext->GPTDetected) {
-        // Защита GPT заголовка (сектор 1)
         if (sector == 1) {
             return TRUE;
         }
         
-        // Защита таблицы разделов
         if (ext->GPTStartLBA > 0) {
             ULONGLONG gptEnd = ext->GPTStartLBA + ext->GPTSectorCount;
             if (sector >= ext->GPTStartLBA && sector < gptEnd) {
@@ -269,7 +259,6 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
         return STATUS_UNSUCCESSFUL;
     }
     
-    // Проверяем, является ли диск GPT
     isGPT = IsGPTDisk(PhysicalDevice, &partitionEntryLBA, &entryCount);
     if (isGPT) {
         ext->GPTDetected = TRUE;
