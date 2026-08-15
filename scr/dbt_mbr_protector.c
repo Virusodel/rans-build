@@ -8,9 +8,26 @@
 #define SECTOR_SIZE 512
 #define MAX_PROCESS_NAME 256
 #define MAX_DRIVE_COUNT 64
-#define PROTECTED_SECTOR_COUNT 10
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+// Структура GPT заголовка
+typedef struct _GPT_HEADER {
+    UCHAR Signature[8];
+    UCHAR Revision[4];
+    ULONG HeaderSize;
+    ULONG HeaderCRC32;
+    ULONG Reserved;
+    ULONGLONG MyLBA;
+    ULONGLONG AlternateLBA;
+    ULONGLONG FirstUsableLBA;
+    ULONGLONG LastUsableLBA;
+    UCHAR DiskGUID[16];
+    ULONGLONG PartitionEntryLBA;
+    ULONG NumberOfPartitionEntries;
+    ULONG SizeOfPartitionEntry;
+    ULONG PartitionEntryArrayCRC32;
+} GPT_HEADER, *PGPT_HEADER;
 
 typedef struct _FILTER_EXTENSION {
     PDEVICE_OBJECT FilterDeviceObject;
@@ -19,6 +36,9 @@ typedef struct _FILTER_EXTENSION {
     ULONG64 TotalAttempts;
     KSPIN_LOCK Lock;
     BOOLEAN IsProtected;
+    ULONGLONG GPTStartLBA;
+    ULONG GPTSectorCount;
+    BOOLEAN GPTDetected;
 } FILTER_EXTENSION, *PFILTER_EXTENSION;
 
 ULONG64 g_GlobalAttempts = 0;
@@ -64,20 +84,99 @@ BOOLEAN IsSuspiciousProcess(PCHAR ProcessName) {
     return FALSE;
 }
 
-BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
-    if (ByteOffset == 0 && Length >= SECTOR_SIZE) {
+// Проверка, является ли диск GPT
+BOOLEAN IsGPTDisk(PDEVICE_OBJECT PhysicalDevice, PULONGLONG pPartitionEntryLBA, PULONG pEntryCount) {
+    NTSTATUS status;
+    PIRP irp;
+    IO_STATUS_BLOCK ioStatus;
+    KEVENT event;
+    LARGE_INTEGER byteOffset;
+    GPT_HEADER gptHeader;
+    PFILE_OBJECT fileObject = NULL;
+    PDEVICE_OBJECT targetDevice = NULL;
+    BOOLEAN result = FALSE;
+    
+    // Открываем устройство
+    status = IoGetDeviceObjectPointer(&PhysicalDevice->DriverObject->DriverName, 
+                                      FILE_READ_DATA, &fileObject, &targetDevice);
+    if (!NT_SUCCESS(status)) {
+        return FALSE;
+    }
+    
+    // Читаем сектор 1 (GPT заголовок)
+    KeInitializeEvent(&event, NotificationEvent, FALSE);
+    byteOffset.QuadPart = SECTOR_SIZE;
+    
+    irp = IoBuildSynchronousFsdRequest(IRP_MJ_READ, targetDevice,
+                                       &gptHeader, sizeof(GPT_HEADER),
+                                       &byteOffset, &event, &ioStatus);
+    if (!irp) {
+        ObDereferenceObject(fileObject);
+        return FALSE;
+    }
+    
+    status = IoCallDriver(targetDevice, irp);
+    if (status == STATUS_PENDING) {
+        KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, NULL);
+        status = ioStatus.Status;
+    }
+    
+    ObDereferenceObject(fileObject);
+    
+    if (!NT_SUCCESS(status)) {
+        return FALSE;
+    }
+    
+    // Проверяем сигнатуру GPT
+    if (gptHeader.Signature[0] == 'E' &&
+        gptHeader.Signature[1] == 'F' &&
+        gptHeader.Signature[2] == 'I' &&
+        gptHeader.Signature[3] == ' ' &&
+        gptHeader.Signature[4] == 'P' &&
+        gptHeader.Signature[5] == 'A' &&
+        gptHeader.Signature[6] == 'R' &&
+        gptHeader.Signature[7] == 'T') {
+        
+        if (pPartitionEntryLBA) {
+            *pPartitionEntryLBA = gptHeader.PartitionEntryLBA;
+        }
+        if (pEntryCount) {
+            *pEntryCount = gptHeader.NumberOfPartitionEntries * 
+                           gptHeader.SizeOfPartitionEntry / SECTOR_SIZE + 1;
+        }
+        result = TRUE;
+    }
+    
+    return result;
+}
+
+// Проверка защиты сектора (динамическая)
+BOOLEAN IsProtectedSector(PFILTER_EXTENSION ext, ULONGLONG ByteOffset, ULONG Length) {
+    ULONGLONG sector = ByteOffset / SECTOR_SIZE;
+    ULONGLONG endSector = (ByteOffset + Length - 1) / SECTOR_SIZE;
+    
+    // Защита MBR (сектор 0)
+    if (sector == 0) {
         return TRUE;
     }
     
-    for (ULONG i = 1; i < PROTECTED_SECTOR_COUNT; i++) {
-        if (ByteOffset == (ULONGLONG)i * SECTOR_SIZE) {
+    // Защита GPT (если обнаружена)
+    if (ext->GPTDetected) {
+        // Защита GPT заголовка (сектор 1)
+        if (sector == 1) {
             return TRUE;
         }
-    }
-    
-    if (ByteOffset < (ULONGLONG)PROTECTED_SECTOR_COUNT * SECTOR_SIZE && 
-        ByteOffset + Length > (ULONGLONG)PROTECTED_SECTOR_COUNT * SECTOR_SIZE) {
-        return TRUE;
+        
+        // Защита таблицы разделов
+        if (ext->GPTStartLBA > 0) {
+            ULONGLONG gptEnd = ext->GPTStartLBA + ext->GPTSectorCount;
+            if (sector >= ext->GPTStartLBA && sector < gptEnd) {
+                return TRUE;
+            }
+            if (endSector >= ext->GPTStartLBA && endSector < gptEnd) {
+                return TRUE;
+            }
+        }
     }
     
     return FALSE;
@@ -89,7 +188,7 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     ULONGLONG byteOffset = irpSp->Parameters.Write.ByteOffset.QuadPart;
     ULONG length = irpSp->Parameters.Write.Length;
     
-    if (IsProtectedSector(byteOffset, length)) {
+    if (IsProtectedSector(ext, byteOffset, length)) {
         CHAR processName[MAX_PROCESS_NAME];
         ULONG pid = 0;
         
@@ -104,7 +203,7 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         
         if (g_EnableLogging) {
             DbgPrint(
-                "[DBT] BLOCKED MBR WRITE #%llu\n"
+                "[DBT] BLOCKED WRITE #%llu\n"
                 "  Device: PhysicalDrive%lu\n"
                 "  Process: %s (PID: %lu)\n"
                 "  Offset: 0x%llX, Length: 0x%X\n"
@@ -142,6 +241,9 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
     PFILTER_EXTENSION ext;
     UNICODE_STRING deviceName;
     WCHAR nameBuffer[64];
+    ULONGLONG partitionEntryLBA = 0;
+    ULONG entryCount = 0;
+    BOOLEAN isGPT = FALSE;
     
     swprintf(nameBuffer, 64, L"\\Device\\DbtMbrProtector_%lu", DeviceNumber);
     RtlInitUnicodeString(&deviceName, nameBuffer);
@@ -157,11 +259,26 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
     ext->DeviceNumber = DeviceNumber;
     ext->TotalAttempts = 0;
     ext->IsProtected = TRUE;
+    ext->GPTDetected = FALSE;
+    ext->GPTStartLBA = 0;
+    ext->GPTSectorCount = 0;
     KeInitializeSpinLock(&ext->Lock);
     
     if (!ext->AttachedToDevice) {
         IoDeleteDevice(filterDevice);
         return STATUS_UNSUCCESSFUL;
+    }
+    
+    // Проверяем, является ли диск GPT
+    isGPT = IsGPTDisk(PhysicalDevice, &partitionEntryLBA, &entryCount);
+    if (isGPT) {
+        ext->GPTDetected = TRUE;
+        ext->GPTStartLBA = partitionEntryLBA;
+        ext->GPTSectorCount = entryCount;
+        DbgPrint("[DBT] PhysicalDrive%lu: GPT detected, protecting LBA %llu-%llu\n",
+                 DeviceNumber, partitionEntryLBA, partitionEntryLBA + entryCount);
+    } else {
+        DbgPrint("[DBT] PhysicalDrive%lu: MBR detected\n", DeviceNumber);
     }
     
     filterDevice->Flags |= DO_BUFFERED_IO;
