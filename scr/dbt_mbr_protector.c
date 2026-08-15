@@ -2,6 +2,7 @@
 #include <ntdddisk.h>
 #include <wdm.h>
 #include <stdlib.h>
+#include <ntstrsafe.h>
 
 #define DEVICE_NAME L"\\Device\\DbtMbrProtector"
 #define SYM_LINK_NAME L"\\DosDevices\\DbtMbrProtector"
@@ -12,6 +13,8 @@
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_GET_BLOCK_INFO CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+extern PCHAR PsGetProcessImageFileName(PEPROCESS Process);
 
 typedef struct _BLOCK_INFO {
     ULONG64 BlockedCount;
@@ -43,23 +46,22 @@ const char* SuspiciousProcesses[] = {
 
 NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
-    ULONG pid = (ULONG)PsGetCurrentProcessId();
+    ULONG pid = (ULONG)(ULONG_PTR)PsGetCurrentProcessId();
     
-    UNREFERENCED_PARAMETER(Size);
     if (pPid) *pPid = pid;
     
     __try {
         PCHAR pName = PsGetProcessImageFileName(CurrentProcess);
         if (pName) {
-            sprintf(ProcessName, "%s", pName);
+            RtlStringCchPrintfA(ProcessName, Size, "%s", pName);
             return STATUS_SUCCESS;
         }
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        sprintf(ProcessName, "UNKNOWN");
+        RtlStringCchPrintfA(ProcessName, Size, "UNKNOWN");
         return STATUS_UNSUCCESSFUL;
     }
     
-    sprintf(ProcessName, "UNKNOWN");
+    RtlStringCchPrintfA(ProcessName, Size, "UNKNOWN");
     return STATUS_SUCCESS;
 }
 
@@ -155,7 +157,7 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
     UNICODE_STRING deviceName;
     WCHAR nameBuffer[64];
     
-    swprintf(nameBuffer, 64, L"\\Device\\DbtMbrProtector_%lu", DeviceNumber);
+    RtlStringCchPrintfW(nameBuffer, 64, L"\\Device\\DbtMbrProtector_%lu", DeviceNumber);
     RtlInitUnicodeString(&deviceName, nameBuffer);
     
     status = IoCreateDevice(DriverObject, sizeof(FILTER_EXTENSION),
@@ -206,7 +208,7 @@ NTSTATUS AttachToAllDisks(PDRIVER_OBJECT DriverObject) {
     ULONG i;
     
     for (i = 0; i < MAX_DRIVE_COUNT; i++) {
-        swprintf(buffer, 64, L"\\Device\\Harddisk%lu\\DR0", i);
+        RtlStringCchPrintfW(buffer, 64, L"\\Device\\Harddisk%lu\\DR0", i);
         RtlInitUnicodeString(&deviceName, buffer);
         
         status = IoGetDeviceObjectPointer(&deviceName, FILE_ANY_ACCESS, 
@@ -216,7 +218,7 @@ NTSTATUS AttachToAllDisks(PDRIVER_OBJECT DriverObject) {
             ObDereferenceObject(fileObject);
         }
         
-        swprintf(buffer, 64, L"\\Device\\HarddiskVolume%lu", i);
+        RtlStringCchPrintfW(buffer, 64, L"\\Device\\HarddiskVolume%lu", i);
         RtlInitUnicodeString(&deviceName, buffer);
         
         status = IoGetDeviceObjectPointer(&deviceName, FILE_ANY_ACCESS, 
