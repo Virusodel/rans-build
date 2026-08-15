@@ -17,9 +17,22 @@ jobs:
       with:
         vs-version: '17.0'
         
-    - name: Install Legacy WDK 2004 with x86 support
+    - name: Install Legacy WDK 2004 via Chocolatey
+      shell: pwsh
       run: |
-        winget install Microsoft.WDK.10.2004 --accept-package-agreements --accept-source-agreements
+        Write-Host "Installing WDK 10.0.19041.0 via Chocolatey..."
+        choco install windows-wdk-10-version-2004 -y --force --ignore-checksums
+        
+        Write-Host "Checking installation..."
+        $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($ntddk) {
+          $version = $ntddk.Directory.Parent.Parent.Name
+          Write-Host "Found WDK Version: $version"
+          echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+        } else {
+          Write-Host "WDK not found! Using fallback..."
+          echo "WDK_VERSION=10.0.19041.0" | Out-File -FilePath $env:GITHUB_ENV -Append
+        }
         
     - name: Verify Source Files
       shell: pwsh
@@ -46,8 +59,6 @@ jobs:
         
         mkdir scr\obj 2>nul
         
-        echo Finding WDK version...
-        for /f "delims=" %%i in ('dir "C:\Program Files (x86)\Windows Kits\10\Include" /b /ad | findstr /r "^10\.[0-9]"') do set WDK_VERSION=%%i
         echo Using WDK_VERSION: %WDK_VERSION%
         
         cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
