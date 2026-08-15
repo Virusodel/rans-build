@@ -17,20 +17,9 @@ jobs:
       with:
         vs-version: '17.0'
         
-    - name: Install Windows SDK & WDK
-      shell: pwsh
+    - name: Install Legacy WDK 2004 with x86 support
       run: |
-        choco install windows-sdk-10-version-2004-windbg -y
-        
-        $ntddk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Recurse -Filter "ntddk.h" | Select-Object -First 1
-        if ($ntddk) {
-          $version = $ntddk.Directory.Parent.Name
-          Write-Host "Using WDK Version: $version"
-          echo "WDK_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
-        } else {
-          Write-Host "ntddk.h not found!"
-          exit 1
-        }
+        winget install Microsoft.WDK.10.2004 --accept-package-agreements --accept-source-agreements
         
     - name: Verify Source Files
       shell: pwsh
@@ -50,25 +39,51 @@ jobs:
           }
         }
         
-    - name: Build Kernel Driver
+    - name: Build Kernel Driver (x86)
       shell: cmd
       run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
         
-        rem Безопасная сборка через проект vcxproj для максимальной совместимости (Win 7 - Win 11)
-        msbuild dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10 /p:SignMode=Off
-        
-        rem Создаем структуру папок, которую ожидает остальная часть скрипта
         mkdir scr\obj 2>nul
-        copy x64\Release\dbt_mbr_protector\dbt_mbr_protector.sys scr\obj\
-        copy x64\Release\dbt_mbr_protector\dbt_mbr_protector.pdb scr\obj\
-        copy scr\dbt_mbr_protector.inf scr\obj\
         
-        if not exist scr\obj\dbt_mbr_protector.sys (
-          echo ERROR: MSBuild failed to create driver!
+        echo Finding WDK version...
+        for /f "delims=" %%i in ('dir "C:\Program Files (x86)\Windows Kits\10\Include" /b /ad | findstr /r "^10\.[0-9]"') do set WDK_VERSION=%%i
+        echo Using WDK_VERSION: %WDK_VERSION%
+        
+        cl /c /Zi /GS- /W4 /O2 /DNDEBUG ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\km" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\shared" ^
+          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
+          /D_X86_ ^
+          /D_WIN32 ^
+          /D_WIN32_WINNT=0x0601 ^
+          /DWINVER=0x0601 ^
+          /DNTDDI_VERSION=0x06010000 ^
+          /D_DISABLE_DEPRECATE_STRING_SDK_WARNINGS ^
+          /GS- ^
+          scr\dbt_mbr_protector.c ^
+          /Foscr\obj\dbt_mbr_protector.obj
+        
+        if not exist scr\obj\dbt_mbr_protector.obj (
+          echo ERROR: x86 compilation failed!
           exit /b 1
         )
-        echo Driver build complete!
+        
+        link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:scr\obj\dbt_mbr_protector.sys ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\x86" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km" ^
+          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
+          scr\obj\dbt_mbr_protector.obj ^
+          ntoskrnl.lib hal.lib wmilib.lib
+        
+        if not exist scr\obj\dbt_mbr_protector.sys (
+          echo ERROR: x86 linking failed!
+          exit /b 1
+        )
+        
+        copy scr\dbt_mbr_protector.inf scr\obj\
+        
+        echo x86 Driver build complete!
         
     - name: Build Notifier (Universal x86)
       shell: cmd
@@ -113,7 +128,7 @@ jobs:
         
         if ($signtool) {
           Write-Host "Signing driver..."
-          & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" $sysPath
+          & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://timestamp.digicert.com $sysPath
           
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Driver signed successfully!"
@@ -240,7 +255,7 @@ jobs:
         
         FILES:
         ------
-        dbt_mbr_protector.sys  : Kernel-mode filter driver
+        dbt_mbr_protector.sys  : Kernel-mode filter driver (x86)
         dbt_mbr_protector.inf  : Driver installation file
         dbt_notifier.exe       : User-mode notification service (Universal x86)
         install.bat            : Automated installation script
@@ -261,7 +276,7 @@ jobs:
         
         REQUIREMENTS:
         -------------
-        - Windows 7/8/10/11 (x64)
+        - Windows 7/8/10/11 (x86)
         - Administrator privileges
         - Test signing mode (enabled by installer)
         
@@ -281,7 +296,7 @@ jobs:
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: dbt-mbr-protector-suite
+        name: dbt-mbr-protector-suite-x86
         path: artifacts\*
         retention-days: 30
         
@@ -290,7 +305,7 @@ jobs:
       shell: pwsh
       run: |
         $version = Get-Date -Format "yyyy.MM.dd.HHmm"
-        $zipFile = "dbt-mbr-protector-$version.zip"
+        $zipFile = "dbt-mbr-protector-x86-$version.zip"
         Compress-Archive -Path artifacts\* -DestinationPath $zipFile -Force
         echo "ZIP_FILE=$zipFile" | Out-File -FilePath $env:GITHUB_ENV -Append
         
@@ -298,5 +313,5 @@ jobs:
       if: github.ref == 'refs/heads/main'
       uses: actions/upload-artifact@v4
       with:
-        name: release-package
+        name: release-package-x86
         path: ${{ env.ZIP_FILE }}
