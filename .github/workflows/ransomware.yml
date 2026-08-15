@@ -66,6 +66,7 @@ jobs:
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
           /DNTDDI_VERSION=0x06010000 ^
+          /D_CRT_SECURE_NO_WARNINGS ^
           scr\dbt_mbr_protector.c ^
           /Foartifacts\x64\dbt_mbr_protector.obj
         
@@ -90,6 +91,7 @@ jobs:
           /D_WIN64 ^
           /D_WIN32_WINNT=0x0601 ^
           /DWINVER=0x0601 ^
+          /D_CRT_SECURE_NO_WARNINGS ^
           notifier\dbt_notifier.cpp ^
           /Foartifacts\x64\dbt_notifier.obj
         
@@ -136,11 +138,11 @@ jobs:
           exit /b 1
         )
         
-        :: Правильный путь для x86 — i386
+        :: Прямой путь к библиотекам для x86
         link /MACHINE:X86 /DRIVER /ENTRY:DriverEntry /SUBSYSTEM:NATIVE /OUT:artifacts\x86\dbt_mbr_protector.sys ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\i386" ^
-          artifacts\x86\dbt_mbr_protector.obj ^
-          ntoskrnl.lib hal.lib
+          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\i386\ntoskrnl.lib" ^
+          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\km\i386\hal.lib" ^
+          artifacts\x86\dbt_mbr_protector.obj
         
         if not exist artifacts\x86\dbt_mbr_protector.sys (
           echo ERROR: x86 Driver linking failed!
@@ -163,9 +165,12 @@ jobs:
         )
         
         link /MACHINE:X86 /OUT:artifacts\x86\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386" ^
-          artifacts\x86\dbt_notifier.obj ^
-          user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
+          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\user32.lib" ^
+          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\kernel32.lib" ^
+          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\psapi.lib" ^
+          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\shlwapi.lib" ^
+          "C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\i386\advapi32.lib" ^
+          artifacts\x86\dbt_notifier.obj
         
         if not exist artifacts\x86\dbt_notifier.exe (
           echo ERROR: x86 Notifier linking failed!
