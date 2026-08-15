@@ -1,8 +1,8 @@
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Release|x64">
+    <ProjectConfiguration Include="Release|Win32">
       <Configuration>Release</Configuration>
-      <Platform>x64</Platform>
+      <Platform>Win32</Platform>
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -15,7 +15,7 @@
     <ConfigurationType>Driver</ConfigurationType>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <TargetVersion>Windows10</TargetVersion>
     <UseDebugLibraries>false</UseDebugLibraries>
   </PropertyGroup>
@@ -23,18 +23,19 @@
   <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <WppEnabled>false</WppEnabled>
-      <PreprocessorDefinitions>_AMD64_;_WIN64;NDEBUG;_WIN32_WINNT=0x0601;WINVER=0x0601;NTDDI_VERSION=0x06010000;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_X86_;_WIN32;NDEBUG;_WIN32_WINNT=0x0601;WINVER=0x0601;NTDDI_VERSION=0x06010000;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(IntDir)</AdditionalIncludeDirectories>
       <WarningLevel>Level4</WarningLevel>
     </ClCompile>
     <Link>
       <EntryPointSymbol>DriverEntry</EntryPointSymbol>
+      <TargetMachine>MachineX86</TargetMachine>
       <AdditionalDependencies>ntoskrnl.lib;hal.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
