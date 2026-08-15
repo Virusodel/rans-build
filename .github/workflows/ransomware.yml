@@ -114,7 +114,7 @@ jobs:
         
         if ($signtool) {
           Write-Host "Signing driver..."
-          & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" /t http://digicert.com $sysPath
+          & $signtool.FullName sign /v /fd SHA256 /a /s My /n "DBT Test Root" $sysPath
           
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Driver signed successfully!"
