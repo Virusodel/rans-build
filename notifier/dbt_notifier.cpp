@@ -23,6 +23,16 @@ typedef struct _BLOCK_INFO {
     CHAR ProcessName[256];
 } BLOCK_INFO;
 
+std::wstring Utf8ToUtf16(const std::string& utf8) {
+    if (utf8.empty()) return L"";
+    int len = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, NULL, 0);
+    if (len <= 0) return L"";
+    std::wstring result(len, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &result[0], len);
+    result.resize(len - 1);
+    return result;
+}
+
 struct LanguageStrings {
     const wchar_t* Title;
     const wchar_t* ErrorMsg;
@@ -112,9 +122,9 @@ DWORD WINAPI MonitorThread(LPVOID param) {
     
     if (hDevice == INVALID_HANDLE_VALUE) {
         DWORD err = GetLastError();
+        std::wstring errorMsg = Utf8ToUtf16("Failed to open device!\n\nError code: 0x%08X (%lu)\n\nTry running as Administrator.");
         WCHAR msg[512];
-        wsprintfW(msg, L"%s\n\nError code: 0x%08X (%lu)\n\nTry running as Administrator.", 
-                  str.ErrorMsg, err, err);
+        wsprintfW(msg, errorMsg.c_str(), err, err);
         MessageBoxW(NULL, msg, str.Title, MB_ICONERROR | MB_OK);
         return 1;
     }
@@ -183,10 +193,10 @@ BOOL IsElevated() {
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     if (!IsElevated()) {
-        MessageBoxA(NULL, 
-                    "DBT MBR Protector Notifier requires Administrator privileges.\n"
-                    "Please run as Administrator.",
-                    "DBT Notifier", MB_ICONERROR | MB_OK);
+        MessageBoxW(NULL, 
+                    Utf8ToUtf16("DBT MBR Protector Notifier requires Administrator privileges.\nPlease run as Administrator.").c_str(),
+                    Utf8ToUtf16("DBT Notifier").c_str(),
+                    MB_ICONERROR | MB_OK);
         return 1;
     }
     
