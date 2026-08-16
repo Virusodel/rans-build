@@ -338,9 +338,21 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     
     RtlInitUnicodeString(&deviceName, DEVICE_NAME);
     RtlInitUnicodeString(&symLinkName, SYM_LINK_NAME);
+    
+    DbgPrint("[DBT] Creating symlink %wZ -> %wZ\n", &symLinkName, &deviceName);
+    
     status = IoCreateSymbolicLink(&symLinkName, &deviceName);
     if (!NT_SUCCESS(status)) {
-        DbgPrint("[DBT] Failed to create symbolic link: 0x%X\n", status);
+        DbgPrint("[DBT] Failed to create symlink: 0x%X, retrying...\n", status);
+        IoDeleteSymbolicLink(&symLinkName);
+        status = IoCreateSymbolicLink(&symLinkName, &deviceName);
+        if (!NT_SUCCESS(status)) {
+            DbgPrint("[DBT] Retry failed too!\n");
+        } else {
+            DbgPrint("[DBT] Symlink created on retry!\n");
+        }
+    } else {
+        DbgPrint("[DBT] Symlink created successfully!\n");
     }
     
     AttachToAllDisks(DriverObject);
