@@ -113,7 +113,7 @@ DWORD WINAPI MonitorThread(LPVOID param) {
     if (hDevice == INVALID_HANDLE_VALUE) {
         DWORD err = GetLastError();
         WCHAR msg[512];
-        wsprintfW(msg, L"%s\n\nError code: 0x%08X (%lu)", 
+        wsprintfW(msg, L"%s\n\nError code: 0x%08X (%lu)\n\nTry running as Administrator.", 
                   str.ErrorMsg, err, err);
         MessageBoxW(NULL, msg, str.Title, MB_ICONERROR | MB_OK);
         return 1;
@@ -167,26 +167,31 @@ DWORD WINAPI MonitorThread(LPVOID param) {
     return 0;
 }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    int lang = GetSystemLanguage();
-    LanguageStrings str = GetStrings(lang);
-    
-    BOOL isAdmin = FALSE;
-    PSID adminGroup = NULL;
-    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
-    if (AllocateAndInitializeSid(&ntAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID,
-                                 DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &adminGroup)) {
-        CheckTokenMembership(NULL, adminGroup, &isAdmin);
-        FreeSid(adminGroup);
+BOOL IsElevated() {
+    BOOL isElevated = FALSE;
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        TOKEN_ELEVATION elevation = {0};
+        DWORD size = sizeof(TOKEN_ELEVATION);
+        if (GetTokenInformation(hToken, TokenElevation, &elevation, size, &size)) {
+            isElevated = elevation.TokenIsElevated;
+        }
+        CloseHandle(hToken);
     }
-    
-    if (!isAdmin) {
-        MessageBoxA(NULL, "DBT MBR Protector Notifier\n\n"
-                         "This application requires Administrator privileges.\n"
-                         "Please run as Administrator.", 
-                    "DBT Notifier", MB_ICONWARNING | MB_OK);
+    return isElevated;
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    if (!IsElevated()) {
+        MessageBoxA(NULL, 
+                    "DBT MBR Protector Notifier requires Administrator privileges.\n"
+                    "Please run as Administrator.",
+                    "DBT Notifier", MB_ICONERROR | MB_OK);
         return 1;
     }
+    
+    int lang = GetSystemLanguage();
+    LanguageStrings str = GetStrings(lang);
     
     MessageBoxW(NULL, str.StartMsg, L"DBT Monitor", MB_OK | MB_ICONINFORMATION);
     
