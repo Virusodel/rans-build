@@ -55,10 +55,8 @@ jobs:
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
         
-        rem Безопасная сборка через проект vcxproj для максимальной совместимости (Win 7 - Win 11)
         msbuild dbt_mbr_protector.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10 /p:SignMode=Off
         
-        rem Создаем структуру папок, которую ожидает остальная часть скрипта
         mkdir scr\obj 2>nul
         copy x64\Release\dbt_mbr_protector\dbt_mbr_protector.sys scr\obj\
         copy x64\Release\dbt_mbr_protector\dbt_mbr_protector.pdb scr\obj\
@@ -70,12 +68,25 @@ jobs:
         )
         echo Driver build complete!
         
-    - name: Build Notifier (Universal x86)
+    - name: Build Notifier
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
         
         mkdir notifier\obj 2>nul
+        
+        echo ^<?xml version="1.0" encoding="UTF-8" standalone="yes"?^> > notifier\obj\dbt_notifier.manifest
+        echo ^<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"^> >> notifier\obj\dbt_notifier.manifest
+        echo   ^<assemblyIdentity version="1.0.0.0" processorArchitecture="X86" name="DBTNotifier" type="win32"/^> >> notifier\obj\dbt_notifier.manifest
+        echo   ^<description^>DBT MBR Protector Notifier^</description^> >> notifier\obj\dbt_notifier.manifest
+        echo   ^<trustInfo xmlns="urn:schemas-microsoft-com:asm.v2"^> >> notifier\obj\dbt_notifier.manifest
+        echo     ^<security^> >> notifier\obj\dbt_notifier.manifest
+        echo       ^<requestedPrivileges^> >> notifier\obj\dbt_notifier.manifest
+        echo         ^<requestedExecutionLevel level="requireAdministrator" uiAccess="false"/^> >> notifier\obj\dbt_notifier.manifest
+        echo       ^</requestedPrivileges^> >> notifier\obj\dbt_notifier.manifest
+        echo     ^</security^> >> notifier\obj\dbt_notifier.manifest
+        echo   ^</trustInfo^> >> notifier\obj\dbt_notifier.manifest
+        echo ^</assembly^> >> notifier\obj\dbt_notifier.manifest
         
         cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
           /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
@@ -90,10 +101,11 @@ jobs:
         
         link /MACHINE:X86 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
+          /MANIFEST:EMBED /MANIFESTINPUT:notifier\obj\dbt_notifier.manifest ^
           notifier\obj\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
         
-        echo Universal Notifier build complete!
+        echo Notifier build complete!
         
     - name: Sign Driver
       shell: pwsh
@@ -242,7 +254,7 @@ jobs:
         ------
         dbt_mbr_protector.sys  : Kernel-mode filter driver
         dbt_mbr_protector.inf  : Driver installation file
-        dbt_notifier.exe       : User-mode notification service (Universal x86)
+        dbt_notifier.exe       : User-mode notification service
         install.bat            : Automated installation script
         uninstall.bat          : Automated removal script
         
