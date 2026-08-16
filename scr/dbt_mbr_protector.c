@@ -343,6 +343,9 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
         DbgPrint("[DBT] Failed to create control device: 0x%X\n", status);
         return status;
     }
+    
+    RtlZeroMemory(controlDevice->DeviceExtension, sizeof(FILTER_EXTENSION));
+    
     controlDevice->Flags |= DO_BUFFERED_IO;
     controlDevice->Flags &= ~DO_DEVICE_INITIALIZING;
     DbgPrint("[DBT] Control device created: %wZ\n", &deviceName);
