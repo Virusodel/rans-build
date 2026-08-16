@@ -101,9 +101,11 @@ jobs:
         
         link /MACHINE:X86 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
           /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
-          /MANIFEST:EMBED /MANIFESTINPUT:notifier\obj\dbt_notifier.manifest ^
+          /MANIFEST:NO ^
           notifier\obj\dbt_notifier.obj ^
           user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
+        
+        mt.exe -manifest notifier\obj\dbt_notifier.manifest -outputresource:notifier\obj\dbt_notifier.exe;#1
         
         echo Notifier build complete!
         
