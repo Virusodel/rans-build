@@ -1,7 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
 
-#define NOTIFY_EVENT_NAME L"\\BaseNamedObjects\\DbtMbrProtectorEvent"
+#define NOTIFY_EVENT_NAME L"Global\\DbtMbrProtectorEvent"
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     BOOL isAdmin = FALSE;
