@@ -13,20 +13,6 @@
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-#define NOTIFY_EVENT_NAME L"\\BaseNamedObjects\\DbtMbrProtectorEvent"
-
-NTSYSCALLAPI NTSTATUS NTAPI ZwCreateEvent(
-    OUT PHANDLE EventHandle,
-    IN ACCESS_MASK DesiredAccess,
-    IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
-    IN EVENT_TYPE EventType,
-    IN BOOLEAN InitialState
-);
-
-NTSYSCALLAPI NTSTATUS NTAPI ZwClose(
-    IN HANDLE Handle
-);
-
 typedef struct _FILTER_EXTENSION {
     PDEVICE_OBJECT FilterDeviceObject;
     PDEVICE_OBJECT AttachedToDevice;
@@ -41,7 +27,6 @@ ULONG g_LastBlockedPid = 0;
 CHAR g_LastBlockedProcessName[MAX_PROCESS_NAME] = {0};
 KSPIN_LOCK g_GlobalLock;
 BOOLEAN g_EnableLogging = TRUE;
-HANDLE g_NotifyEventHandle = NULL;
 
 const char* SuspiciousProcesses[] = {
     "petya", "goldeneye", "misha", "satana",
@@ -103,6 +88,39 @@ BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
     return FALSE;
 }
 
+void ShowNotification(const char* processName, ULONG pid, ULONG64 attemptNumber, ULONG deviceNumber) {
+    UNICODE_STRING title, text;
+    WCHAR titleBuffer[128];
+    WCHAR textBuffer[512];
+    ULONG_PTR param[3];
+    ULONG response;
+    
+    RtlStringCchPrintfW(titleBuffer, 128, L"DBT MBR Protector");
+    RtlInitUnicodeString(&title, titleBuffer);
+    
+    RtlStringCchPrintfW(textBuffer, 512,
+        L"BLOCKED MBR WRITE ATTEMPT #%llu\n\n"
+        L"Process: %S (PID: %lu)\n"
+        L"Drive: PhysicalDrive%lu\n"
+        L"Action: Denied (STATUS_ACCESS_DENIED)\n\n"
+        L"Please reboot in Safe Mode if you wish to write to MBR.",
+        attemptNumber, processName, pid, deviceNumber);
+    RtlInitUnicodeString(&text, textBuffer);
+    
+    param[0] = (ULONG_PTR)&text;
+    param[1] = (ULONG_PTR)&title;
+    param[2] = 0x40;
+    
+    ExRaiseHardError(
+        STATUS_SERVICE_NOTIFICATION,
+        3,
+        3,
+        param,
+        1,
+        &response
+    );
+}
+
 NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PFILTER_EXTENSION ext = (PFILTER_EXTENSION)DeviceObject->DeviceExtension;
     PIO_STACK_LOCATION irpSp = IoGetCurrentIrpStackLocation(Irp);
@@ -118,8 +136,6 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         KIRQL oldIrql;
         KeAcquireSpinLock(&g_GlobalLock, &oldIrql);
         g_GlobalAttempts++;
-        g_LastBlockedPid = pid;
-        RtlCopyMemory(g_LastBlockedProcessName, processName, MAX_PROCESS_NAME);
         ext->TotalAttempts++;
         ULONG64 attemptNumber = g_GlobalAttempts;
         KeReleaseSpinLock(&g_GlobalLock, oldIrql);
@@ -142,9 +158,7 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             }
         }
         
-        if (g_NotifyEventHandle) {
-            KeSetEvent(g_NotifyEventHandle, IO_NO_INCREMENT, FALSE);
-        }
+        ShowNotification(processName, pid, attemptNumber, ext->DeviceNumber);
         
         Irp->IoStatus.Status = STATUS_ACCESS_DENIED;
         Irp->IoStatus.Information = 0;
@@ -301,11 +315,6 @@ VOID DriverUnload(PDRIVER_OBJECT DriverObject) {
     RtlInitUnicodeString(&symLinkName, SYM_LINK_NAME);
     IoDeleteSymbolicLink(&symLinkName);
     
-    if (g_NotifyEventHandle) {
-        ZwClose(g_NotifyEventHandle);
-        g_NotifyEventHandle = NULL;
-    }
-    
     DbgPrint("[DBT] Driver unloaded. Total blocked: %llu\n", g_GlobalAttempts);
 }
 
@@ -313,8 +322,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     ULONG i;
     UNICODE_STRING symLinkName;
     UNICODE_STRING deviceName;
-    UNICODE_STRING eventName;
-    OBJECT_ATTRIBUTES objAttr;
     NTSTATUS status;
     
     DbgPrint("[DBT] DBT MBR Protector loading...\n");
@@ -324,16 +331,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     g_GlobalAttempts = 0;
     g_LastBlockedPid = 0;
     RtlZeroMemory(g_LastBlockedProcessName, sizeof(g_LastBlockedProcessName));
-    
-    RtlInitUnicodeString(&eventName, NOTIFY_EVENT_NAME);
-    InitializeObjectAttributes(&objAttr, &eventName, OBJ_CASE_INSENSITIVE, NULL, NULL);
-    
-    status = ZwCreateEvent(&g_NotifyEventHandle, EVENT_ALL_ACCESS, &objAttr, NotificationEvent, FALSE);
-    if (!NT_SUCCESS(status)) {
-        DbgPrint("[DBT] Failed to create notification event: 0x%X\n", status);
-        return status;
-    }
-    DbgPrint("[DBT] Notification event created: %wZ\n", &eventName);
     
     for (i = 0; i < IRP_MJ_MAXIMUM_FUNCTION; i++) {
         DriverObject->MajorFunction[i] = DispatchPassThrough;
