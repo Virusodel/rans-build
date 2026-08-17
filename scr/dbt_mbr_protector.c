@@ -36,6 +36,7 @@ ULONG g_LastBlockedPid = 0;
 CHAR g_LastBlockedProcessName[MAX_PROCESS_NAME] = {0};
 KSPIN_LOCK g_GlobalLock;
 BOOLEAN g_EnableLogging = TRUE;
+BOOLEAN g_ShowNotifications = TRUE;  // ← НОВОЕ: включаем уведомления
 
 const char* SuspiciousProcesses[] = {
     "petya", "goldeneye", "misha", "satana",
@@ -132,6 +133,26 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
                     processName, pid
                 );
             }
+        }
+        
+        // ★★★★★ ПОКАЗЫВАЕМ УВЕДОМЛЕНИЕ ★★★★★
+        if (g_ShowNotifications) {
+            WCHAR msgBuffer[512];
+            swprintf(msgBuffer, 512,
+                L"DBT MBR Protector\n\n"
+                L"BLOCKED MBR WRITE ATTEMPT #%llu\n\n"
+                L"Process: %S (PID: %lu)\n"
+                L"Drive: PhysicalDrive%lu\n"
+                L"Action: Denied (STATUS_ACCESS_DENIED)\n\n"
+                L"This attempt was intercepted and blocked at kernel level.",
+                attemptNumber, processName, pid, ext->DeviceNumber);
+            
+            UNICODE_STRING msg;
+            RtlInitUnicodeString(&msg, msgBuffer);
+            
+            // Безопасный способ показать уведомление из ядра
+            // Работает на Windows 7 и выше
+            ZwRaiseHardError(&msg, 0, 0, NULL);
         }
         
         Irp->IoStatus.Status = STATUS_ACCESS_DENIED;
