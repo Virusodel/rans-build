@@ -3,7 +3,6 @@
 #include <wdm.h>
 #include <stdlib.h>
 #include <ntstrsafe.h>
-#include <wdmsec.h>
 
 #define DEVICE_NAME L"\\Device\\DbtMbrProtector"
 #define SYM_LINK_NAME L"\\DosDevices\\DbtMbrProtector"
@@ -16,7 +15,6 @@
 #define IOCTL_GET_BLOCK_INFO CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 extern PCHAR PsGetProcessImageFileName(PEPROCESS Process);
-extern NTSTATUS ZwRaiseHardError(UNICODE_STRING* MessageString, ULONG Type, ULONG Response, PULONG ResponseCode);
 
 typedef struct _BLOCK_INFO {
     ULONG64 BlockedCount;
@@ -38,8 +36,6 @@ ULONG g_LastBlockedPid = 0;
 CHAR g_LastBlockedProcessName[MAX_PROCESS_NAME] = {0};
 KSPIN_LOCK g_GlobalLock;
 BOOLEAN g_EnableLogging = TRUE;
-BOOLEAN g_ShowNotifications = TRUE;
-BOOLEAN g_WelcomeShown = FALSE;
 
 const char* SuspiciousProcesses[] = {
     "petya", "goldeneye", "misha", "satana",
@@ -99,23 +95,6 @@ BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
     return FALSE;
 }
 
-VOID ShowWelcomeMessage() {
-    if (g_WelcomeShown) return;
-    
-    UNICODE_STRING msg;
-    WCHAR msgBuffer[512];
-    RtlStringCchPrintfW(msgBuffer, 512,
-        L"DBT MBR Protector\n\n"
-        L"Driver loaded successfully!\n\n"
-        L"All attempts to overwrite the boot sector\n"
-        L"will be intercepted and blocked.\n\n"
-        L"System is protected.");
-    
-    RtlInitUnicodeString(&msg, msgBuffer);
-    ZwRaiseHardError(&msg, 0, 0, NULL);
-    g_WelcomeShown = TRUE;
-}
-
 NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PFILTER_EXTENSION ext = (PFILTER_EXTENSION)DeviceObject->DeviceExtension;
     PIO_STACK_LOCATION irpSp = IoGetCurrentIrpStackLocation(Irp);
@@ -153,22 +132,6 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
                     processName, pid
                 );
             }
-        }
-        
-        if (g_ShowNotifications) {
-            UNICODE_STRING msg;
-            WCHAR msgBuffer[512];
-            RtlStringCchPrintfW(msgBuffer, 512,
-                L"DBT MBR Protector\n\n"
-                L"BLOCKED MBR WRITE ATTEMPT #%llu\n\n"
-                L"Process: %S (PID: %lu)\n"
-                L"Drive: PhysicalDrive%lu\n"
-                L"Action: Denied (STATUS_ACCESS_DENIED)\n\n"
-                L"This attempt was intercepted and blocked at kernel level.",
-                attemptNumber, processName, pid, ext->DeviceNumber);
-            
-            RtlInitUnicodeString(&msg, msgBuffer);
-            ZwRaiseHardError(&msg, 0, 0, NULL);
         }
         
         Irp->IoStatus.Status = STATUS_ACCESS_DENIED;
@@ -363,7 +326,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     KeInitializeSpinLock(&g_GlobalLock);
     g_GlobalAttempts = 0;
     g_LastBlockedPid = 0;
-    g_WelcomeShown = FALSE;
     RtlZeroMemory(g_LastBlockedProcessName, sizeof(g_LastBlockedProcessName));
     
     for (i = 0; i < IRP_MJ_MAXIMUM_FUNCTION; i++) {
@@ -385,8 +347,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     
     DbgPrint("[DBT] DBT MBR Protector loaded successfully.\n");
     DbgPrint("[DBT] Protecting all PhysicalDrive devices.\n");
-    
-    ShowWelcomeMessage();
     
     return STATUS_SUCCESS;
 }
