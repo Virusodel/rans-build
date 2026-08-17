@@ -22,6 +22,14 @@ typedef struct _FILTER_EXTENSION {
     BOOLEAN IsProtected;
 } FILTER_EXTENSION, *PFILTER_EXTENSION;
 
+typedef struct _NOTIFICATION_WORKITEM {
+    WORK_QUEUE_ITEM WorkItem;
+    CHAR ProcessName[MAX_PROCESS_NAME];
+    ULONG Pid;
+    ULONG64 AttemptNumber;
+    ULONG DeviceNumber;
+} NOTIFICATION_WORKITEM, *PNOTIFICATION_WORKITEM;
+
 ULONG64 g_GlobalAttempts = 0;
 ULONG g_LastBlockedPid = 0;
 CHAR g_LastBlockedProcessName[MAX_PROCESS_NAME] = {0};
@@ -36,6 +44,96 @@ const char* SuspiciousProcesses[] = {
 #define SUSPICIOUS_COUNT (sizeof(SuspiciousProcesses) / sizeof(SuspiciousProcesses[0]))
 
 extern PCHAR PsGetProcessImageFileName(PEPROCESS Process);
+
+VOID ShowNotificationWorker(PVOID Context) {
+    PNOTIFICATION_WORKITEM workItem = (PNOTIFICATION_WORKITEM)Context;
+    UNICODE_STRING title, text;
+    WCHAR titleBuffer[128];
+    WCHAR textBuffer[512];
+    ULONG_PTR param[3];
+    ULONG response;
+    
+    if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
+        ExFreePool(workItem);
+        return;
+    }
+    
+    RtlStringCchPrintfW(titleBuffer, 128, L"DBT MBR Protector");
+    RtlInitUnicodeString(&title, titleBuffer);
+    
+    RtlStringCchPrintfW(textBuffer, 512,
+        L"BLOCKED MBR WRITE ATTEMPT #%llu\n\n"
+        L"Process: %S (PID: %lu)\n"
+        L"Drive: PhysicalDrive%lu\n"
+        L"Action: Denied (STATUS_ACCESS_DENIED)",
+        workItem->AttemptNumber, workItem->ProcessName, workItem->Pid, workItem->DeviceNumber);
+    RtlInitUnicodeString(&text, textBuffer);
+    
+    param[0] = (ULONG_PTR)&text;
+    param[1] = (ULONG_PTR)&title;
+    param[2] = 0x40;
+    
+    ExRaiseHardError(
+        STATUS_SERVICE_NOTIFICATION,
+        3,
+        3,
+        param,
+        1,
+        &response
+    );
+    
+    ExFreePool(workItem);
+}
+
+void ShowNotification(const char* processName, ULONG pid, ULONG64 attemptNumber, ULONG deviceNumber) {
+    PNOTIFICATION_WORKITEM workItem;
+    
+    if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
+        workItem = (PNOTIFICATION_WORKITEM)ExAllocatePool(NonPagedPool, sizeof(NOTIFICATION_WORKITEM));
+        if (!workItem) {
+            DbgPrint("[DBT] Failed to allocate work item\n");
+            return;
+        }
+        
+        RtlStringCchPrintfA(workItem->ProcessName, MAX_PROCESS_NAME, "%s", processName);
+        workItem->Pid = pid;
+        workItem->AttemptNumber = attemptNumber;
+        workItem->DeviceNumber = deviceNumber;
+        
+        ExInitializeWorkItem(&workItem->WorkItem, ShowNotificationWorker, workItem);
+        ExQueueWorkItem(&workItem->WorkItem, DelayedWorkQueue);
+    } else {
+        UNICODE_STRING title, text;
+        WCHAR titleBuffer[128];
+        WCHAR textBuffer[512];
+        ULONG_PTR param[3];
+        ULONG response;
+        
+        RtlStringCchPrintfW(titleBuffer, 128, L"DBT MBR Protector");
+        RtlInitUnicodeString(&title, titleBuffer);
+        
+        RtlStringCchPrintfW(textBuffer, 512,
+            L"BLOCKED MBR WRITE ATTEMPT #%llu\n\n"
+            L"Process: %S (PID: %lu)\n"
+            L"Drive: PhysicalDrive%lu\n"
+            L"Action: Denied (STATUS_ACCESS_DENIED)",
+            attemptNumber, processName, pid, deviceNumber);
+        RtlInitUnicodeString(&text, textBuffer);
+        
+        param[0] = (ULONG_PTR)&text;
+        param[1] = (ULONG_PTR)&title;
+        param[2] = 0x40;
+        
+        ExRaiseHardError(
+            STATUS_SERVICE_NOTIFICATION,
+            3,
+            3,
+            param,
+            1,
+            &response
+        );
+    }
+}
 
 NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
@@ -86,39 +184,6 @@ BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
     }
     
     return FALSE;
-}
-
-void ShowNotification(const char* processName, ULONG pid, ULONG64 attemptNumber, ULONG deviceNumber) {
-    UNICODE_STRING title, text;
-    WCHAR titleBuffer[128];
-    WCHAR textBuffer[512];
-    ULONG_PTR param[3];
-    ULONG response;
-    
-    RtlStringCchPrintfW(titleBuffer, 128, L"DBT MBR Protector");
-    RtlInitUnicodeString(&title, titleBuffer);
-    
-    RtlStringCchPrintfW(textBuffer, 512,
-        L"BLOCKED MBR WRITE ATTEMPT #%llu\n\n"
-        L"Process: %S (PID: %lu)\n"
-        L"Drive: PhysicalDrive%lu\n"
-        L"Action: Denied (STATUS_ACCESS_DENIED)\n\n"
-        L"Please reboot in Safe Mode if you wish to write to MBR.",
-        attemptNumber, processName, pid, deviceNumber);
-    RtlInitUnicodeString(&text, textBuffer);
-    
-    param[0] = (ULONG_PTR)&text;
-    param[1] = (ULONG_PTR)&title;
-    param[2] = 0x40;
-    
-    ExRaiseHardError(
-        STATUS_SERVICE_NOTIFICATION,
-        3,
-        3,
-        param,
-        1,
-        &response
-    );
 }
 
 NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
