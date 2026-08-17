@@ -3,6 +3,7 @@
 #include <wdm.h>
 #include <stdlib.h>
 #include <ntstrsafe.h>
+#include <wdmsec.h>
 
 #define DEVICE_NAME L"\\Device\\DbtMbrProtector"
 #define SYM_LINK_NAME L"\\DosDevices\\DbtMbrProtector"
@@ -15,6 +16,7 @@
 #define IOCTL_GET_BLOCK_INFO CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 extern PCHAR PsGetProcessImageFileName(PEPROCESS Process);
+extern NTSTATUS ZwRaiseHardError(UNICODE_STRING* MessageString, ULONG Type, ULONG Response, PULONG ResponseCode);
 
 typedef struct _BLOCK_INFO {
     ULONG64 BlockedCount;
@@ -100,19 +102,15 @@ BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
 VOID ShowWelcomeMessage() {
     if (g_WelcomeShown) return;
     
+    UNICODE_STRING msg;
     WCHAR msgBuffer[512];
-    swprintf(msgBuffer, 512,
+    RtlStringCchPrintfW(msgBuffer, 512,
         L"DBT MBR Protector\n\n"
         L"Driver loaded successfully!\n\n"
-        L"Protection is now active:\n"
-        L"- MBR (sector 0) - BLOCKED\n"
-        L"- GPT (sectors 1-9) - BLOCKED\n"
-        L"- Ransomware detection - ACTIVE\n\n"
         L"All attempts to overwrite the boot sector\n"
         L"will be intercepted and blocked.\n\n"
         L"System is protected.");
     
-    UNICODE_STRING msg;
     RtlInitUnicodeString(&msg, msgBuffer);
     ZwRaiseHardError(&msg, 0, 0, NULL);
     g_WelcomeShown = TRUE;
@@ -158,8 +156,9 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         }
         
         if (g_ShowNotifications) {
+            UNICODE_STRING msg;
             WCHAR msgBuffer[512];
-            swprintf(msgBuffer, 512,
+            RtlStringCchPrintfW(msgBuffer, 512,
                 L"DBT MBR Protector\n\n"
                 L"BLOCKED MBR WRITE ATTEMPT #%llu\n\n"
                 L"Process: %S (PID: %lu)\n"
@@ -168,7 +167,6 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
                 L"This attempt was intercepted and blocked at kernel level.",
                 attemptNumber, processName, pid, ext->DeviceNumber);
             
-            UNICODE_STRING msg;
             RtlInitUnicodeString(&msg, msgBuffer);
             ZwRaiseHardError(&msg, 0, 0, NULL);
         }
