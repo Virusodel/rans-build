@@ -12,15 +12,8 @@
 #define PROTECTED_SECTOR_COUNT 10
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
-#define IOCTL_GET_BLOCK_INFO CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-extern PCHAR PsGetProcessImageFileName(PEPROCESS Process);
-
-typedef struct _BLOCK_INFO {
-    ULONG64 BlockedCount;
-    ULONG PID;
-    CHAR ProcessName[256];
-} BLOCK_INFO, *PBLOCK_INFO;
+#define NOTIFY_EVENT_NAME L"\\BaseNamedObjects\\DbtMbrProtectorEvent"
 
 typedef struct _FILTER_EXTENSION {
     PDEVICE_OBJECT FilterDeviceObject;
@@ -36,6 +29,7 @@ ULONG g_LastBlockedPid = 0;
 CHAR g_LastBlockedProcessName[MAX_PROCESS_NAME] = {0};
 KSPIN_LOCK g_GlobalLock;
 BOOLEAN g_EnableLogging = TRUE;
+KEVENT g_NotifyEvent;
 
 const char* SuspiciousProcesses[] = {
     "petya", "goldeneye", "misha", "satana",
@@ -43,6 +37,8 @@ const char* SuspiciousProcesses[] = {
     "locky", "cryptolocker", "badrabbit"
 };
 #define SUSPICIOUS_COUNT (sizeof(SuspiciousProcesses) / sizeof(SuspiciousProcesses[0]))
+
+extern PCHAR PsGetProcessImageFileName(PEPROCESS Process);
 
 NTSTATUS GetProcessName(PCHAR ProcessName, SIZE_T Size, PULONG pPid) {
     PEPROCESS CurrentProcess = PsGetCurrentProcess();
@@ -133,6 +129,8 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
                 );
             }
         }
+        
+        KeSetEvent(&g_NotifyEvent, IO_NO_INCREMENT, FALSE);
         
         Irp->IoStatus.Status = STATUS_ACCESS_DENIED;
         Irp->IoStatus.Information = 0;
@@ -261,28 +259,6 @@ NTSTATUS DispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             break;
         }
         
-        case IOCTL_GET_BLOCK_INFO:
-        {
-            if (Irp->AssociatedIrp.SystemBuffer && 
-                irpSp->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(BLOCK_INFO)) {
-                
-                PBLOCK_INFO outInfo = (PBLOCK_INFO)Irp->AssociatedIrp.SystemBuffer;
-                
-                KIRQL oldIrql;
-                KeAcquireSpinLock(&g_GlobalLock, &oldIrql);
-                outInfo->BlockedCount = g_GlobalAttempts;
-                outInfo->PID = g_LastBlockedPid;
-                RtlCopyMemory(outInfo->ProcessName, g_LastBlockedProcessName, MAX_PROCESS_NAME);
-                KeReleaseSpinLock(&g_GlobalLock, oldIrql);
-                
-                info = sizeof(BLOCK_INFO);
-                status = STATUS_SUCCESS;
-            } else {
-                status = STATUS_BUFFER_TOO_SMALL;
-            }
-            break;
-        }
-        
         default:
             status = STATUS_INVALID_DEVICE_REQUEST;
             break;
@@ -311,6 +287,8 @@ VOID DriverUnload(PDRIVER_OBJECT DriverObject) {
     RtlInitUnicodeString(&symLinkName, SYM_LINK_NAME);
     IoDeleteSymbolicLink(&symLinkName);
     
+    KeResetEvent(&g_NotifyEvent);
+    
     DbgPrint("[DBT] Driver unloaded. Total blocked: %llu\n", g_GlobalAttempts);
 }
 
@@ -327,6 +305,8 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     g_GlobalAttempts = 0;
     g_LastBlockedPid = 0;
     RtlZeroMemory(g_LastBlockedProcessName, sizeof(g_LastBlockedProcessName));
+    
+    KeInitializeEvent(&g_NotifyEvent, NotificationEvent, FALSE);
     
     for (i = 0; i < IRP_MJ_MAXIMUM_FUNCTION; i++) {
         DriverObject->MajorFunction[i] = DispatchPassThrough;
