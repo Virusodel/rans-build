@@ -116,13 +116,22 @@ DWORD WINAPI MonitorThread(LPVOID param) {
     int lang = *(int*)param;
     LanguageStrings str = GetStrings(lang);
     
-    HANDLE hDevice = CreateFileW(L"\\\\.\\DbtMbrProtector", 
+    // Пытаемся открыть устройство фильтра для первого диска
+    // В старом драйвере оно всегда существует как \\.\DbtMbrProtector_0
+    HANDLE hDevice = CreateFileW(L"\\\\.\\DbtMbrProtector_0", 
                                  GENERIC_READ | GENERIC_WRITE,
                                  0, NULL, OPEN_EXISTING, 0, NULL);
     
     if (hDevice == INVALID_HANDLE_VALUE) {
+        // Если не получилось, пробуем альтернативные имена
+        hDevice = CreateFileW(L"\\\\.\\DbtMbrProtector", 
+                             GENERIC_READ | GENERIC_WRITE,
+                             0, NULL, OPEN_EXISTING, 0, NULL);
+    }
+    
+    if (hDevice == INVALID_HANDLE_VALUE) {
         DWORD err = GetLastError();
-        std::wstring errorMsg = Utf8ToUtf16("Failed to open device!\n\nError code: 0x%08X (%lu)\n\nTry running as Administrator.");
+        std::wstring errorMsg = Utf8ToUtf16("Failed to open DBT MBR Protector device!\n\nError code: 0x%08X (%lu)\n\nMake sure the driver is installed.\n\nTry running as Administrator.");
         WCHAR msg[512];
         wsprintfW(msg, errorMsg.c_str(), err, err);
         MessageBoxW(NULL, msg, str.Title, MB_ICONERROR | MB_OK);
