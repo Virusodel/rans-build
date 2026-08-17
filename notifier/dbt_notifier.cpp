@@ -2,7 +2,6 @@
 #include <winioctl.h>
 #include <stdio.h>
 #include <string>
-#include <vector>
 #include <thread>
 #include <chrono>
 #include <tlhelp32.h>
@@ -23,118 +22,32 @@ typedef struct _BLOCK_INFO {
     CHAR ProcessName[256];
 } BLOCK_INFO;
 
-std::wstring Utf8ToUtf16(const std::string& utf8) {
-    if (utf8.empty()) return L"";
-    int len = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, NULL, 0);
-    if (len <= 0) return L"";
-    std::wstring result(len, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &result[0], len);
-    result.resize(len - 1);
-    return result;
-}
-
-struct LanguageStrings {
-    const wchar_t* Title;
-    const wchar_t* ErrorMsg;
-    const wchar_t* StartMsg;
-    const wchar_t* AlertTitle;
-    const wchar_t* AlertHeader;
-    const wchar_t* AlertProcess;
-    const wchar_t* AlertDrive;
-    const wchar_t* AlertAction;
-    const wchar_t* AlertTotal;
-    const wchar_t* AlertNote;
-    const wchar_t* NotAdminMsg;
-};
-
-LanguageStrings GetStrings(int lang) {
-    LanguageStrings eng = {
-        L"DBT Notifier Error",
-        L"Failed to open DBT MBR Protector device!\n\nMake sure the driver is installed and running.",
-        L"DBT MBR Protector Notifier\n\nMonitoring MBR write attempts\nWill show alert on any block\nRunning in background\n\nClick OK to minimize to system tray.",
-        L"DBT MBR Protector Alert",
-        L"BLOCKED MBR WRITE ATTEMPT #%llu",
-        L"Process: %s (PID: %lu)",
-        L"Drive: PhysicalDrive",
-        L"Action: Denied (STATUS_ACCESS_DENIED)",
-        L"Total blocked attempts: %llu",
-        L"This attempt was intercepted and blocked at kernel level.",
-        L"This application requires Administrator privileges.\nPlease run as Administrator."
-    };
+HANDLE FindFirstDevice() {
+    WCHAR deviceName[64];
+    HANDLE hDevice;
     
-    LanguageStrings rus = {
-        L"Ошибка DBT Notifier",
-        L"Не удалось открыть устройство DBT MBR Protector!\n\nУбедитесь, что драйвер установлен и запущен.",
-        L"DBT MBR Protector Notifier\n\nМониторинг попыток записи в MBR\nПоказывает предупреждения при блокировке\nРаботает в фоновом режиме\n\nНажмите OK для сверки в системный трей.",
-        L"DBT MBR Protector Предупреждение",
-        L"БЛОКИРОВКА ЗАПИСИ В MBR #%llu",
-        L"Процесс: %s (PID: %lu)",
-        L"Диск: PhysicalDrive",
-        L"Действие: Отказано (STATUS_ACCESS_DENIED)",
-        L"Всего заблокировано: %llu",
-        L"Эта попытка была перехвачена на уровне ядра.",
-        L"Это приложение требует прав администратора.\nЗапустите от имени администратора."
-    };
-    
-    return (lang == 1) ? rus : eng;
-}
-
-int GetSystemLanguage() {
-    LANGID lang = GetUserDefaultUILanguage();
-    if (lang == 0x0419 || lang == 0x041A || lang == 0x0422 || lang == 0x0822) {
-        return 1;
-    }
-    return 0;
-}
-
-std::wstring GetProcessNameFromId(DWORD pid) {
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-    if (!hProcess) return L"Unknown";
-    
-    WCHAR processName[MAX_PATH] = {0};
-    DWORD size = MAX_PATH;
-    
-    if (QueryFullProcessImageNameW(hProcess, 0, processName, &size)) {
-        CloseHandle(hProcess);
-        return std::wstring(PathFindFileNameW(processName));
-    }
-    
-    HMODULE hMod;
-    DWORD cbNeeded;
-    if (EnumProcessModules(hProcess, &hMod, sizeof(hMod), &cbNeeded)) {
-        if (GetModuleBaseNameW(hProcess, hMod, processName, MAX_PATH)) {
-            CloseHandle(hProcess);
-            return std::wstring(processName);
+    for (int i = 0; i < 64; i++) {
+        swprintf(deviceName, 64, L"\\\\.\\DbtMbrProtector_%d", i);
+        hDevice = CreateFileW(deviceName, GENERIC_READ | GENERIC_WRITE,
+                              0, NULL, OPEN_EXISTING, 0, NULL);
+        if (hDevice != INVALID_HANDLE_VALUE) {
+            wprintf(L"Connected to: %s\n", deviceName);
+            return hDevice;
         }
     }
     
-    CloseHandle(hProcess);
-    return L"Unknown";
+    return INVALID_HANDLE_VALUE;
 }
 
 DWORD WINAPI MonitorThread(LPVOID param) {
-    int lang = *(int*)param;
-    LanguageStrings str = GetStrings(lang);
-    
-    // Пытаемся открыть устройство фильтра для первого диска
-    // В старом драйвере оно всегда существует как \\.\DbtMbrProtector_0
-    HANDLE hDevice = CreateFileW(L"\\\\.\\DbtMbrProtector_0", 
-                                 GENERIC_READ | GENERIC_WRITE,
-                                 0, NULL, OPEN_EXISTING, 0, NULL);
+    HANDLE hDevice = FindFirstDevice();
     
     if (hDevice == INVALID_HANDLE_VALUE) {
-        // Если не получилось, пробуем альтернативные имена
-        hDevice = CreateFileW(L"\\\\.\\DbtMbrProtector", 
-                             GENERIC_READ | GENERIC_WRITE,
-                             0, NULL, OPEN_EXISTING, 0, NULL);
-    }
-    
-    if (hDevice == INVALID_HANDLE_VALUE) {
-        DWORD err = GetLastError();
-        std::wstring errorMsg = Utf8ToUtf16("Failed to open DBT MBR Protector device!\n\nError code: 0x%08X (%lu)\n\nMake sure the driver is installed.\n\nTry running as Administrator.");
-        WCHAR msg[512];
-        wsprintfW(msg, errorMsg.c_str(), err, err);
-        MessageBoxW(NULL, msg, str.Title, MB_ICONERROR | MB_OK);
+        MessageBoxW(NULL,
+            L"Failed to open DBT MBR Protector device!\n\n"
+            L"Make sure the driver is installed and running.\n"
+            L"Try running as Administrator.",
+            L"Notifier Error", MB_ICONERROR | MB_OK);
         return 1;
     }
     
@@ -152,27 +65,23 @@ DWORD WINAPI MonitorThread(LPVOID param) {
                 if (DeviceIoControl(hDevice, IOCTL_GET_BLOCK_INFO, NULL, 0,
                                     &blockInfo, sizeof(BLOCK_INFO), &bytesReturned, NULL)) {
                     
-                    std::wstring processName = std::wstring(blockInfo.ProcessName, 
-                                                            blockInfo.ProcessName + strlen(blockInfo.ProcessName));
-                    ULONG64 blockedCount = currentAttempts - lastAttempts;
+                    std::string processNameStr(blockInfo.ProcessName);
+                    std::wstring processNameW(processNameStr.begin(), processNameStr.end());
                     
                     WCHAR msg[1024];
-                    wsprintfW(msg, 
+                    wsprintfW(msg,
                         L"DBT MBR Protector\n\n"
-                        L"%s\n\n"
-                        L"%s\n"
-                        L"%s\n"
-                        L"   %s\n"
-                        L"%s\n\n"
-                        L"%s",
-                        str.AlertHeader, blockedCount,
-                        str.AlertProcess, processName.c_str(), blockInfo.PID,
-                        str.AlertDrive,
-                        str.AlertAction,
-                        str.AlertTotal, currentAttempts,
-                        str.AlertNote);
+                        L"BLOCKED MBR WRITE ATTEMPT #%llu\n\n"
+                        L"Process: %s (PID: %lu)\n"
+                        L"Drive: PhysicalDrive\n"
+                        L"Action: Denied (STATUS_ACCESS_DENIED)\n\n"
+                        L"Total blocked attempts: %llu\n\n"
+                        L"This attempt was intercepted and blocked at kernel level.",
+                        currentAttempts - lastAttempts,
+                        processNameW.c_str(), blockInfo.PID,
+                        currentAttempts);
                     
-                    MessageBoxW(NULL, msg, str.AlertTitle, 
+                    MessageBoxW(NULL, msg, L"DBT MBR Protector Alert",
                                MB_OK | MB_ICONWARNING | MB_SYSTEMMODAL | MB_TOPMOST);
                 }
                 
@@ -202,19 +111,21 @@ BOOL IsElevated() {
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     if (!IsElevated()) {
-        MessageBoxW(NULL, 
-                    Utf8ToUtf16("DBT MBR Protector Notifier requires Administrator privileges.\nPlease run as Administrator.").c_str(),
-                    Utf8ToUtf16("DBT Notifier").c_str(),
-                    MB_ICONERROR | MB_OK);
+        MessageBoxW(NULL,
+            L"DBT MBR Protector Notifier requires Administrator privileges.\n"
+            L"Please run as Administrator.",
+            L"Notifier", MB_ICONERROR | MB_OK);
         return 1;
     }
     
-    int lang = GetSystemLanguage();
-    LanguageStrings str = GetStrings(lang);
+    MessageBoxW(NULL,
+        L"DBT MBR Protector Notifier\n\n"
+        L"Monitoring MBR write attempts...\n"
+        L"Will show alert on any block.\n"
+        L"Running in background.",
+        L"DBT Monitor", MB_OK | MB_ICONINFORMATION);
     
-    MessageBoxW(NULL, str.StartMsg, L"DBT Monitor", MB_OK | MB_ICONINFORMATION);
-    
-    HANDLE hThread = CreateThread(NULL, 0, MonitorThread, &lang, 0, NULL);
+    HANDLE hThread = CreateThread(NULL, 0, MonitorThread, NULL, 0, NULL);
     if (hThread) {
         WaitForSingleObject(hThread, INFINITE);
         CloseHandle(hThread);
