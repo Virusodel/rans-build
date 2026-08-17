@@ -29,7 +29,7 @@ ULONG g_LastBlockedPid = 0;
 CHAR g_LastBlockedProcessName[MAX_PROCESS_NAME] = {0};
 KSPIN_LOCK g_GlobalLock;
 BOOLEAN g_EnableLogging = TRUE;
-KEVENT g_NotifyEvent;
+HANDLE g_NotifyEventHandle = NULL;
 
 const char* SuspiciousProcesses[] = {
     "petya", "goldeneye", "misha", "satana",
@@ -130,7 +130,9 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             }
         }
         
-        KeSetEvent(&g_NotifyEvent, IO_NO_INCREMENT, FALSE);
+        if (g_NotifyEventHandle) {
+            KeSetEvent(g_NotifyEventHandle, IO_NO_INCREMENT, FALSE);
+        }
         
         Irp->IoStatus.Status = STATUS_ACCESS_DENIED;
         Irp->IoStatus.Information = 0;
@@ -287,7 +289,10 @@ VOID DriverUnload(PDRIVER_OBJECT DriverObject) {
     RtlInitUnicodeString(&symLinkName, SYM_LINK_NAME);
     IoDeleteSymbolicLink(&symLinkName);
     
-    KeResetEvent(&g_NotifyEvent);
+    if (g_NotifyEventHandle) {
+        ZwClose(g_NotifyEventHandle);
+        g_NotifyEventHandle = NULL;
+    }
     
     DbgPrint("[DBT] Driver unloaded. Total blocked: %llu\n", g_GlobalAttempts);
 }
@@ -296,6 +301,8 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     ULONG i;
     UNICODE_STRING symLinkName;
     UNICODE_STRING deviceName;
+    UNICODE_STRING eventName;
+    OBJECT_ATTRIBUTES objAttr;
     NTSTATUS status;
     
     DbgPrint("[DBT] DBT MBR Protector loading...\n");
@@ -306,7 +313,15 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     g_LastBlockedPid = 0;
     RtlZeroMemory(g_LastBlockedProcessName, sizeof(g_LastBlockedProcessName));
     
-    KeInitializeEvent(&g_NotifyEvent, NotificationEvent, FALSE);
+    RtlInitUnicodeString(&eventName, NOTIFY_EVENT_NAME);
+    InitializeObjectAttributes(&objAttr, &eventName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    
+    status = ZwCreateEvent(&g_NotifyEventHandle, EVENT_ALL_ACCESS, &objAttr, NotificationEvent, FALSE);
+    if (!NT_SUCCESS(status)) {
+        DbgPrint("[DBT] Failed to create notification event: 0x%X\n", status);
+        return status;
+    }
+    DbgPrint("[DBT] Notification event created: %wZ\n", &eventName);
     
     for (i = 0; i < IRP_MJ_MAXIMUM_FUNCTION; i++) {
         DriverObject->MajorFunction[i] = DispatchPassThrough;
