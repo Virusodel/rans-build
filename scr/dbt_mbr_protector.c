@@ -13,6 +13,15 @@
 
 #define IOCTL_GET_ATTEMPTS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
+NTSYSCALLAPI NTSTATUS NTAPI ExRaiseHardError(
+    IN NTSTATUS ErrorStatus,
+    IN ULONG NumberOfParameters,
+    IN ULONG UnicodeStringParameterMask,
+    IN PULONG_PTR Parameters,
+    IN ULONG ValidResponseOptions,
+    OUT PULONG Response
+);
+
 typedef struct _FILTER_EXTENSION {
     PDEVICE_OBJECT FilterDeviceObject;
     PDEVICE_OBJECT AttachedToDevice;
@@ -89,7 +98,7 @@ void ShowNotification(const char* processName, ULONG pid, ULONG64 attemptNumber,
     PNOTIFICATION_WORKITEM workItem;
     
     if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
-        workItem = (PNOTIFICATION_WORKITEM)ExAllocatePool(NonPagedPool, sizeof(NOTIFICATION_WORKITEM));
+        workItem = (PNOTIFICATION_WORKITEM)ExAllocatePool2(0, sizeof(NOTIFICATION_WORKITEM), 'FRBM');
         if (!workItem) {
             DbgPrint("[DBT] Failed to allocate work item\n");
             return;
