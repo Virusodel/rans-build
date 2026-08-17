@@ -15,6 +15,18 @@
 
 #define NOTIFY_EVENT_NAME L"\\BaseNamedObjects\\DbtMbrProtectorEvent"
 
+NTSYSCALLAPI NTSTATUS NTAPI ZwCreateEvent(
+    OUT PHANDLE EventHandle,
+    IN ACCESS_MASK DesiredAccess,
+    IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
+    IN EVENT_TYPE EventType,
+    IN BOOLEAN InitialState
+);
+
+NTSYSCALLAPI NTSTATUS NTAPI ZwClose(
+    IN HANDLE Handle
+);
+
 typedef struct _FILTER_EXTENSION {
     PDEVICE_OBJECT FilterDeviceObject;
     PDEVICE_OBJECT AttachedToDevice;
