@@ -36,7 +36,8 @@ ULONG g_LastBlockedPid = 0;
 CHAR g_LastBlockedProcessName[MAX_PROCESS_NAME] = {0};
 KSPIN_LOCK g_GlobalLock;
 BOOLEAN g_EnableLogging = TRUE;
-BOOLEAN g_ShowNotifications = TRUE;  // ← НОВОЕ: включаем уведомления
+BOOLEAN g_ShowNotifications = TRUE;
+BOOLEAN g_WelcomeShown = FALSE;
 
 const char* SuspiciousProcesses[] = {
     "petya", "goldeneye", "misha", "satana",
@@ -96,6 +97,27 @@ BOOLEAN IsProtectedSector(ULONGLONG ByteOffset, ULONG Length) {
     return FALSE;
 }
 
+VOID ShowWelcomeMessage() {
+    if (g_WelcomeShown) return;
+    
+    WCHAR msgBuffer[512];
+    swprintf(msgBuffer, 512,
+        L"DBT MBR Protector\n\n"
+        L"Driver loaded successfully!\n\n"
+        L"Protection is now active:\n"
+        L"- MBR (sector 0) - BLOCKED\n"
+        L"- GPT (sectors 1-9) - BLOCKED\n"
+        L"- Ransomware detection - ACTIVE\n\n"
+        L"All attempts to overwrite the boot sector\n"
+        L"will be intercepted and blocked.\n\n"
+        L"System is protected.");
+    
+    UNICODE_STRING msg;
+    RtlInitUnicodeString(&msg, msgBuffer);
+    ZwRaiseHardError(&msg, 0, 0, NULL);
+    g_WelcomeShown = TRUE;
+}
+
 NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PFILTER_EXTENSION ext = (PFILTER_EXTENSION)DeviceObject->DeviceExtension;
     PIO_STACK_LOCATION irpSp = IoGetCurrentIrpStackLocation(Irp);
@@ -135,7 +157,6 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             }
         }
         
-        // ★★★★★ ПОКАЗЫВАЕМ УВЕДОМЛЕНИЕ ★★★★★
         if (g_ShowNotifications) {
             WCHAR msgBuffer[512];
             swprintf(msgBuffer, 512,
@@ -149,9 +170,6 @@ NTSTATUS DispatchWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             
             UNICODE_STRING msg;
             RtlInitUnicodeString(&msg, msgBuffer);
-            
-            // Безопасный способ показать уведомление из ядра
-            // Работает на Windows 7 и выше
             ZwRaiseHardError(&msg, 0, 0, NULL);
         }
         
@@ -347,6 +365,7 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     KeInitializeSpinLock(&g_GlobalLock);
     g_GlobalAttempts = 0;
     g_LastBlockedPid = 0;
+    g_WelcomeShown = FALSE;
     RtlZeroMemory(g_LastBlockedProcessName, sizeof(g_LastBlockedProcessName));
     
     for (i = 0; i < IRP_MJ_MAXIMUM_FUNCTION; i++) {
@@ -368,6 +387,8 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     
     DbgPrint("[DBT] DBT MBR Protector loaded successfully.\n");
     DbgPrint("[DBT] Protecting all PhysicalDrive devices.\n");
+    
+    ShowWelcomeMessage();
     
     return STATUS_SUCCESS;
 }
