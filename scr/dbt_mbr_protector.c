@@ -166,6 +166,10 @@ NTSTATUS CreateFilterDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Physical
     if (!NT_SUCCESS(status)) return status;
     
     ext = (PFILTER_EXTENSION)filterDevice->DeviceExtension;
+    
+    // Обнуляем память расширения устройства, чтобы избежать BSOD при выгрузке
+    RtlZeroMemory(ext, sizeof(FILTER_EXTENSION));
+    
     ext->FilterDeviceObject = filterDevice;
     ext->AttachedToDevice = IoAttachDeviceToDeviceStack(filterDevice, PhysicalDevice);
     ext->DeviceNumber = DeviceNumber;
@@ -319,7 +323,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     UNICODE_STRING symLinkName;
     UNICODE_STRING deviceName;
     NTSTATUS status;
-    PDEVICE_OBJECT controlDevice = NULL;
     
     DbgPrint("[DBT] DBT MBR Protector loading...\n");
     DbgPrint("[DBT] RegistryPath: %wZ\n", RegistryPath);
@@ -329,27 +332,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     g_LastBlockedPid = 0;
     RtlZeroMemory(g_LastBlockedProcessName, sizeof(g_LastBlockedProcessName));
     
-    RtlInitUnicodeString(&deviceName, DEVICE_NAME);
-    status = IoCreateDevice(
-        DriverObject,
-        sizeof(FILTER_EXTENSION),
-        &deviceName,
-        FILE_DEVICE_UNKNOWN,
-        0,
-        FALSE,
-        &controlDevice
-    );
-    if (!NT_SUCCESS(status)) {
-        DbgPrint("[DBT] Failed to create control device: 0x%X\n", status);
-        return status;
-    }
-    
-    RtlZeroMemory(controlDevice->DeviceExtension, sizeof(FILTER_EXTENSION));
-    
-    controlDevice->Flags |= DO_BUFFERED_IO;
-    controlDevice->Flags &= ~DO_DEVICE_INITIALIZING;
-    DbgPrint("[DBT] Control device created: %wZ\n", &deviceName);
-    
     for (i = 0; i < IRP_MJ_MAXIMUM_FUNCTION; i++) {
         DriverObject->MajorFunction[i] = DispatchPassThrough;
     }
@@ -358,7 +340,11 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DispatchDeviceControl;
     DriverObject->DriverUnload = DriverUnload;
     
+    // Создаем симлинк без управляющего устройства, чтобы Notifier мог подключиться,
+    // но не нарушалась работа фильтров дисков.
+    RtlInitUnicodeString(&deviceName, DEVICE_NAME);
     RtlInitUnicodeString(&symLinkName, SYM_LINK_NAME);
+    
     DbgPrint("[DBT] Creating symlink %wZ -> %wZ\n", &symLinkName, &deviceName);
     
     status = IoCreateSymbolicLink(&symLinkName, &deviceName);
