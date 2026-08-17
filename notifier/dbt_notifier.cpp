@@ -1,6 +1,7 @@
 #include <windows.h>
+#include <stdio.h>
 
-#define NOTIFY_EVENT_NAME L"Global\\DbtMbrProtectorEvent"
+#define NOTIFY_EVENT_NAME L"\\BaseNamedObjects\\DbtMbrProtectorEvent"
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     BOOL isAdmin = FALSE;
@@ -23,12 +24,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
     
-    HANDLE hEvent = OpenEventW(SYNCHRONIZE, FALSE, NOTIFY_EVENT_NAME);
+    HANDLE hEvent = OpenEventW(SYNCHRONIZE | EVENT_MODIFY_STATE, FALSE, NOTIFY_EVENT_NAME);
     if (!hEvent) {
-        MessageBoxW(NULL, 
+        DWORD err = GetLastError();
+        WCHAR msg[512];
+        wsprintfW(msg, 
             L"Failed to open notification event!\n\n"
-            L"Make sure the driver is installed and running.",
-            L"Notifier Error", MB_ICONERROR | MB_OK);
+            L"Error code: 0x%08X (%lu)\n\n"
+            L"Make sure the driver is installed and running.\n"
+            L"Event name: %s",
+            err, err, NOTIFY_EVENT_NAME);
+        MessageBoxW(NULL, msg, L"Notifier Error", MB_ICONERROR | MB_OK);
         return 1;
     }
     
