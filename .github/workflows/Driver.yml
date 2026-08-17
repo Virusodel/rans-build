@@ -1,4 +1,4 @@
-name: Build DBT MBR Protector Suite
+name: Build DBT MBR Protector Driver
 
 on:
   workflow_dispatch:
@@ -37,8 +37,7 @@ jobs:
       run: |
         $files = @(
           "scr\dbt_mbr_protector.c",
-          "scr\dbt_mbr_protector.inf",
-          "notifier\dbt_notifier.cpp"
+          "scr\dbt_mbr_protector.inf"
         )
         
         foreach ($file in $files) {
@@ -67,47 +66,6 @@ jobs:
           exit /b 1
         )
         echo Driver build complete!
-        
-    - name: Build Notifier
-      shell: cmd
-      run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x86
-        
-        mkdir notifier\obj 2>nul
-        
-        echo ^<?xml version="1.0" encoding="UTF-8" standalone="yes"?^> > notifier\obj\dbt_notifier.manifest
-        echo ^<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"^> >> notifier\obj\dbt_notifier.manifest
-        echo   ^<assemblyIdentity version="1.0.0.0" processorArchitecture="X86" name="DBTNotifier" type="win32"/^> >> notifier\obj\dbt_notifier.manifest
-        echo   ^<description^>DBT MBR Protector Notifier^</description^> >> notifier\obj\dbt_notifier.manifest
-        echo   ^<trustInfo xmlns="urn:schemas-microsoft-com:asm.v2"^> >> notifier\obj\dbt_notifier.manifest
-        echo     ^<security^> >> notifier\obj\dbt_notifier.manifest
-        echo       ^<requestedPrivileges^> >> notifier\obj\dbt_notifier.manifest
-        echo         ^<requestedExecutionLevel level="requireAdministrator" uiAccess="false"/^> >> notifier\obj\dbt_notifier.manifest
-        echo       ^</requestedPrivileges^> >> notifier\obj\dbt_notifier.manifest
-        echo     ^</security^> >> notifier\obj\dbt_notifier.manifest
-        echo   ^</trustInfo^> >> notifier\obj\dbt_notifier.manifest
-        echo ^</assembly^> >> notifier\obj\dbt_notifier.manifest
-        
-        cl /c /Zi /W4 /O2 /DNDEBUG /EHsc ^
-          /I"C:\Program Files (x86)\Windows Kits\10\Include\%WDK_VERSION%\um" ^
-          /D_X86_ ^
-          notifier\dbt_notifier.cpp ^
-          /Fonotifier\obj\dbt_notifier.obj
-        
-        if not exist notifier\obj\dbt_notifier.obj (
-          echo ERROR: Notifier compilation failed!
-          exit /b 1
-        )
-        
-        link /MACHINE:X86 /OUT:notifier\obj\dbt_notifier.exe /SUBSYSTEM:WINDOWS ^
-          /LIBPATH:"C:\Program Files (x86)\Windows Kits\10\Lib\%WDK_VERSION%\um\x86" ^
-          /MANIFEST:NO ^
-          notifier\obj\dbt_notifier.obj ^
-          user32.lib kernel32.lib psapi.lib shlwapi.lib advapi32.lib
-        
-        mt.exe -manifest notifier\obj\dbt_notifier.manifest -outputresource:notifier\obj\dbt_notifier.exe;#1
-        
-        echo Notifier build complete!
         
     - name: Sign Driver
       shell: pwsh
@@ -146,8 +104,7 @@ jobs:
         $files = @(
           "scr\obj\dbt_mbr_protector.sys",
           "scr\obj\dbt_mbr_protector.inf",
-          "scr\obj\dbt_mbr_protector.pdb",
-          "notifier\obj\dbt_notifier.exe"
+          "scr\obj\dbt_mbr_protector.pdb"
         )
         
         foreach ($file in $files) {
@@ -160,142 +117,132 @@ jobs:
         }
         
         $installBat = @"
-        @echo off
-        title DBT MBR Protector Installer
-        echo ========================================
-        echo  DBT MBR Protector - Installation
-        echo ========================================
-        echo.
-        
-        net session >nul 2>&1
-        if %errorLevel% neq 0 (
-          echo ERROR: Administrator privileges required!
-          echo Please run as Administrator.
-          pause
-          exit /b 1
-        )
-        
-        echo [1/5] Enabling test signing mode...
-        bcdedit /set testsigning on >nul 2>&1
-        
-        echo [2/5] Copying driver...
-        copy /Y dbt_mbr_protector.sys C:\Windows\System32\drivers\
-        if %errorLevel% neq 0 (
-          echo ERROR: Failed to copy driver!
-          pause
-          exit /b 1
-        )
-        
-        echo [3/5] Installing service...
-        sc create DbtMbrProtector binPath= "C:\Windows\System32\drivers\dbt_mbr_protector.sys" type= kernel start= boot
-        
-        echo [4/5] Starting driver...
-        sc start DbtMbrProtector
-        
-        echo [5/5] Installing notifier...
-        mkdir "C:\Program Files\DBT" 2>nul
-        copy /Y dbt_notifier.exe "C:\Program Files\DBT\"
-        start "" "C:\Program Files\DBT\dbt_notifier.exe"
-        
-        echo.
-        echo ========================================
-        echo  Installation complete!
-        echo ========================================
-        echo.
-        echo  Please restart your computer for changes to take effect.
-        echo.
-        echo  To test: echo test > \\.\PhysicalDrive0
-        echo.
-        pause
-        "@
+@echo off
+title DBT MBR Protector Installer
+echo ========================================
+echo  DBT MBR Protector - Installation
+echo ========================================
+echo.
+
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+  echo ERROR: Administrator privileges required!
+  echo Please run as Administrator.
+  pause
+  exit /b 1
+)
+
+echo [1/4] Enabling test signing mode...
+bcdedit /set testsigning on >nul 2>&1
+
+echo [2/4] Copying driver...
+copy /Y dbt_mbr_protector.sys C:\Windows\System32\drivers\
+if %errorLevel% neq 0 (
+  echo ERROR: Failed to copy driver!
+  pause
+  exit /b 1
+)
+
+echo [3/4] Installing service...
+sc create DbtMbrProtector binPath= "C:\Windows\System32\drivers\dbt_mbr_protector.sys" type= kernel start= boot
+
+echo [4/4] Starting driver...
+sc start DbtMbrProtector
+
+echo.
+echo ========================================
+echo  Installation complete!
+echo ========================================
+echo.
+echo  Please restart your computer for changes to take effect.
+echo.
+echo  To test: echo test > \\.\PhysicalDrive0
+echo.
+pause
+"@
         $installBat | Out-File -FilePath artifacts\install.bat -Encoding ASCII
         
         $uninstallBat = @"
-        @echo off
-        title DBT MBR Protector Uninstaller
-        echo ========================================
-        echo  DBT MBR Protector - Uninstallation
-        echo ========================================
-        echo.
-        
-        net session >nul 2>&1
-        if %errorLevel% neq 0 (
-          echo ERROR: Administrator privileges required!
-          echo Please run as Administrator.
-          pause
-          exit /b 1
-        )
-        
-        echo [1/4] Stopping notifier...
-        taskkill /F /IM dbt_notifier.exe 2>nul
-        
-        echo [2/4] Stopping driver...
-        sc stop DbtMbrProtector 2>nul
-        
-        echo [3/4] Removing service...
-        sc delete DbtMbrProtector 2>nul
-        
-        echo [4/4] Deleting files...
-        del /F C:\Windows\System32\drivers\dbt_mbr_protector.sys 2>nul
-        rmdir /S /Q "C:\Program Files\DBT" 2>nul
-        
-        echo.
-        echo ========================================
-        echo  Uninstallation complete!
-        echo ========================================
-        echo.
-        pause
-        "@
+@echo off
+title DBT MBR Protector Uninstaller
+echo ========================================
+echo  DBT MBR Protector - Uninstallation
+echo ========================================
+echo.
+
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+  echo ERROR: Administrator privileges required!
+  echo Please run as Administrator.
+  pause
+  exit /b 1
+)
+
+echo [1/3] Stopping driver...
+sc stop DbtMbrProtector 2>nul
+
+echo [2/3] Removing service...
+sc delete DbtMbrProtector 2>nul
+
+echo [3/3] Deleting files...
+del /F C:\Windows\System32\drivers\dbt_mbr_protector.sys 2>nul
+
+echo.
+echo ========================================
+echo  Uninstallation complete!
+echo ========================================
+echo.
+pause
+"@
         $uninstallBat | Out-File -FilePath artifacts\uninstall.bat -Encoding ASCII
         
         $readme = @"
-        DBT MBR PROTECTOR - INSTALLATION GUIDE
-        ======================================
-        
-        FILES:
-        ------
-        dbt_mbr_protector.sys  : Kernel-mode filter driver
-        dbt_mbr_protector.inf  : Driver installation file
-        dbt_notifier.exe       : User-mode notification service
-        install.bat            : Automated installation script
-        uninstall.bat          : Automated removal script
-        
-        INSTALLATION:
-        -------------
-        1. Run install.bat as Administrator
-        2. Restart the computer
-        3. The protection is now active
-        
-        TESTING:
-        --------
-        To verify the driver works:
-        - Run as Administrator: echo test > \\.\PhysicalDrive0
-        - You should see "Access denied"
-        - Notifier will show a warning message
-        
-        REQUIREMENTS:
-        -------------
-        - Windows 7/8/10/11 (x64)
-        - Administrator privileges
-        - Test signing mode (enabled by installer)
-        
-        UNINSTALL:
-        ----------
-        Run uninstall.bat as Administrator
-        
-        NOTES:
-        ------
-        - The driver protects MBR (sector 0) from any write attempts
-        - All blocked attempts are logged to Windows event log
-        - Notifier runs in background and shows alerts
-        - Requires reboot after installation
-        "@
+DBT MBR PROTECTOR - INSTALLATION GUIDE
+======================================
+
+FILES:
+------
+dbt_mbr_protector.sys  : Kernel-mode filter driver
+dbt_mbr_protector.inf  : Driver installation file
+install.bat            : Automated installation script
+uninstall.bat          : Automated removal script
+
+INSTALLATION:
+-------------
+1. Run install.bat as Administrator
+2. Restart the computer
+3. The protection is now active
+
+TESTING:
+--------
+To verify the driver works:
+- Run as Administrator: echo test > \\.\PhysicalDrive0
+- You should see "Access denied"
+
+REQUIREMENTS:
+-------------
+- Windows 7/8/10/11 (x64)
+- Administrator privileges
+- Test signing mode (enabled by installer)
+
+UNINSTALL:
+----------
+Run uninstall.bat as Administrator
+
+NOTES:
+------
+- The driver protects MBR (sector 0) from any write attempts
+- All blocked attempts are logged to Windows event log
+- Uses system notification mechanism (ExRaiseHardError)
+- Requires reboot after installation
+- Safe Mode: Driver is disabled in Safe Mode
+"@
         $readme | Out-File -FilePath artifacts\README.txt -Encoding ASCII
         
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: dbt-mbr-protector-suite
+        name: dbt-mbr-protector-driver
         path: artifacts\*
         retention-days: 30
         
